@@ -2,11 +2,11 @@
 
 from fastapi import FastAPI
 
+from app.api.router import api_router
+
 app = FastAPI(
     title="LifeFlow API",
     version="1.0.0"
 )
 
-@app.get("/")
-def root():
-    return {"message": "LifeFlow API Running"}
+app.include_router(api_router)
