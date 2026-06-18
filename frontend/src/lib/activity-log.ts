@@ -18,9 +18,15 @@ async function writeActivityLog(input: ActivityLogInput) {
   }
 }
 
-/** Fire-and-forget activity log after the response is sent. Never throws. */
+/** Fire-and-forget activity log after the response is sent. Never throws.
+ *  Falls back to synchronous logging outside request context (tests, scripts). */
 export function logActivity(input: ActivityLogInput) {
-  after(() => writeActivityLog(input))
+  try {
+    after(() => writeActivityLog(input))
+  } catch {
+    // Not in a request context — write synchronously
+    writeActivityLog(input)
+  }
 }
 
 export function logTaskCreated(

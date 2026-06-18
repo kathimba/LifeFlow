@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { NotebookPen, Check } from "lucide-react"
+import { useEffect, useMemo, useState, useCallback, useRef } from "react"
+import { NotebookPen, Check, Trash2, Pencil, X, Flame } from "lucide-react"
 
 import AppLayout from "@/app/app-layout"
 import { PageHeader } from "@/components/page-header"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useLogs, todayISO } from "@/lib/store"
+import { useLogs, todayISO, addDays } from "@/lib/store"
 
-// Mood is stored as 1-5 in the DB. Map to label/emoji for display.
 const moodMeta: Record<number, { label: string; emoji: string }> = {
   1: { label: "Rough", emoji: "😣" },
   2: { label: "Low",   emoji: "😕" },
@@ -18,55 +17,139 @@ const moodMeta: Record<number, { label: string; emoji: string }> = {
   4: { label: "Good",  emoji: "🙂" },
   5: { label: "Great", emoji: "🤩" },
 }
-const moodOptions = [5, 4, 3, 2, 1] // display great -> rough, left to right
+
+const energyMeta: Record<number, { label: string; emoji: string }> = {
+  1: { label: "Drained",  emoji: "🪫" },
+  2: { label: "Low",      emoji: "⚡" },
+  3: { label: "Steady",   emoji: "🔋" },
+  4: { label: "Energetic", emoji: "⚡" },
+  5: { label: "Flying",   emoji: "🚀" },
+}
+
+const moodOptions = [5, 4, 3, 2, 1]
+const energyOptions = [5, 4, 3, 2, 1]
+
+const getDate = (iso: string) => iso.slice(0, 10)
 
 export default function LogPage() {
-  const { logs, createLog, updateLog } = useLogs()
+  const { logs, createLog, updateLog, deleteLog } = useLogs()
   const [today, setToday] = useState<string | null>(null)
 
-  useEffect(() => { queueMicrotask(() => setToday(todayISO())) }, [])
+  useEffect(() => { setToday(todayISO()) }, [])
 
-  // Today's entry is the most recent log created today, if any
   const todaysLog = useMemo(
-    () => (today ? logs.find((l) => l.createdAt.slice(0, 10) === today) : undefined),
+    () => (today ? logs.find((l) => getDate(l.createdAt) === today) : undefined),
     [logs, today]
   )
 
-  const [content, setContent] = useState("")
-  const [mood, setMood] = useState<number | undefined>(undefined)
-  const [savedFlash, setSavedFlash] = useState(false)
-
-  useEffect(() => {
-    if (todaysLog) {
-      queueMicrotask(() => {
-        setContent(todaysLog.content ?? "")
-        setMood(todaysLog.mood ?? undefined)
-      })
-    }
-  }, [todaysLog])
-
   const past = useMemo(
-    () => [...logs].filter((l) => !today || l.createdAt.slice(0, 10) !== today)
+    () => logs
+      .filter((l) => today && getDate(l.createdAt) !== today)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [logs, today]
   )
 
-  const save = async () => {
-    if (!today) return
-    const trimmed = content.trim()
-    if (!trimmed && !mood) return
-
-    if (todaysLog) {
-      await updateLog(todaysLog.id, { content: trimmed, mood: mood ?? null })
-    } else {
-      await createLog({ content: trimmed, mood: mood ?? null })
+  const streak = useMemo(() => {
+    if (!today) return 0
+    let count = 0
+    let d = today
+    while (logs.some((l) => getDate(l.createdAt) === d)) {
+      count++
+      d = addDays(d, -1)
     }
-    setSavedFlash(true)
-    window.setTimeout(() => setSavedFlash(false), 1400)
+    return count
+  }, [logs, today])
+
+  const [content, setContent] = useState("")
+  const [mood, setMood] = useState<number | undefined>(undefined)
+  const [energy, setEnergy] = useState<number | undefined>(undefined)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState("")
+
+  // Refs so save() always reads latest values
+  const contentRef = useRef(content)
+  const moodRef = useRef(mood)
+  const energyRef = useRef(energy)
+  const logsRef = useRef(logs)
+  useEffect(() => { contentRef.current = content }, [content])
+  useEffect(() => { moodRef.current = mood }, [mood])
+  useEffect(() => { energyRef.current = energy }, [energy])
+  useEffect(() => { logsRef.current = logs }, [logs])
+
+  // Hydrate from today's log
+  const lastHydratedId = useRef<string | null>(null)
+  useEffect(() => {
+    if (todaysLog && todaysLog.id !== lastHydratedId.current) {
+      lastHydratedId.current = todaysLog.id
+      setContent(todaysLog.content ?? "")
+      setMood(todaysLog.mood ?? undefined)
+      setEnergy(todaysLog.energy ?? undefined)
+    }
+    if (!todaysLog && lastHydratedId.current) {
+      lastHydratedId.current = null
+      setContent("")
+      setMood(undefined)
+      setEnergy(undefined)
+    }
+  }, [todaysLog])
+
+  const savingRef = useRef(false)
+
+const save = useCallback(async () => {
+    if (savingRef.current) return  // Already saving — skip
+    if (!today) return
+    
+    const c = contentRef.current.trim()
+    const m = moodRef.current
+    const e = energyRef.current
+    if (!c && !m && !e) return
+
+    savingRef.current = true
+    try {
+      const currentLogs = logsRef.current
+      const currentTodaysLog = currentLogs.find((l) => getDate(l.createdAt) === today)
+      
+      if (currentTodaysLog) {
+        await updateLog(currentTodaysLog.id, { content: c, mood: m ?? null, energy: e ?? null })
+      } else {
+        await createLog({ content: c, mood: m ?? null, energy: e ?? null })
+      }
+      setSavedFlash(true)
+      setTimeout(() => setSavedFlash(false), 1400)
+    } finally {
+      savingRef.current = false
+    }
+  }, [today, createLog, updateLog])
+
+  const handleContentChange = (value: string) => setContent(value)
+
+  const handleMoodChange = (m: number | undefined) => {
+    setMood(m)
+    moodRef.current = m
+    save()
+  }
+
+  const handleEnergyChange = (e: number | undefined) => {
+    setEnergy(e)
+    energyRef.current = e
+    save()
+  }
+
+  const handleDelete = async (id: string) => { await deleteLog(id) }
+
+  const startEdit = (entryId: string, currentContent: string) => {
+    setEditingId(entryId)
+    setEditContent(currentContent)
+  }
+
+  const saveEdit = async (entryId: string) => {
+    await updateLog(entryId, { content: editContent.trim() })
+    setEditingId(null)
   }
 
   const dateLabel = today
-    ? new Date(today).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
+    ? new Date(today + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
     : ""
 
   return (
@@ -76,9 +159,16 @@ export default function LogPage() {
           title="Daily Log"
           description={dateLabel || "Your personal thinking space"}
           actions={
-            <Button onClick={save} className="gap-1.5">
-              {savedFlash ? <><Check className="h-4 w-4" />Saved</> : todaysLog ? "Update" : "Save entry"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {streak > 1 && (
+                <span className="flex items-center gap-1 rounded-full border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-xs font-medium text-orange-600 dark:text-orange-400">
+                  <Flame className="h-3.5 w-3.5" />{streak} day streak
+                </span>
+              )}
+              <Button onClick={save} className="gap-1.5" disabled={!content.trim() && !mood && !energy}>
+                {savedFlash ? <><Check className="h-4 w-4" />Saved</> : todaysLog ? "Update" : "Save entry"}
+              </Button>
+            </div>
           }
         />
 
@@ -87,35 +177,35 @@ export default function LogPage() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Today&apos;s entry</h2>
             <Textarea
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              onBlur={save}
+              onChange={(e) => handleContentChange(e.target.value)}
               rows={6}
               placeholder="What moved forward today? Wins, doubts, ideas, what's next…"
               className="mt-2 resize-none border-0 bg-transparent px-0 text-base shadow-none focus-visible:ring-0"
             />
           </div>
-
           <div className="border-t border-border" />
-
           <div>
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mood</h2>
             <div className="flex flex-wrap gap-2">
-              {moodOptions.map((m) => {
-                const active = mood === m
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setMood(active ? undefined : m)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                      active ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <span className="text-base leading-none">{moodMeta[m].emoji}</span>
-                    {moodMeta[m].label}
-                  </button>
-                )
-              })}
+              {moodOptions.map((m) => (
+                <button key={m} onClick={() => handleMoodChange(mood === m ? undefined : m)}
+                  className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                    mood === m ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
+                  <span className="text-base leading-none">{moodMeta[m].emoji}</span>{moodMeta[m].label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Energy</h2>
+            <div className="flex flex-wrap gap-2">
+              {energyOptions.map((e) => (
+                <button key={e} onClick={() => handleEnergyChange(energy === e ? undefined : e)}
+                  className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                    energy === e ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
+                  <span className="text-base leading-none">{energyMeta[e].emoji}</span>{energyMeta[e].label}
+                </button>
+              ))}
             </div>
           </div>
         </section>
@@ -124,7 +214,6 @@ export default function LogPage() {
           <div className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
             <NotebookPen className="h-4 w-4 text-primary" />Timeline
           </div>
-
           {past.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border bg-card/40 py-10 text-center text-sm text-muted-foreground">
               Your daily log will build up here, one entry at a time.
@@ -132,22 +221,38 @@ export default function LogPage() {
           ) : (
             <ol className="relative space-y-4 border-l border-border pl-6">
               {past.map((l) => {
-                const logDate = l.createdAt.slice(0, 10)
+                const logDate = getDate(l.createdAt)
+                const isEditing = editingId === l.id
                 return (
-                  <li key={l.id} className="relative">
+                  <li key={l.id} className="relative group">
                     <span className="absolute -left-[27px] mt-1.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
-                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
                       <div className="flex items-center justify-between">
                         <div className="text-xs font-medium text-muted-foreground">
-                          {new Date(logDate).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                          {new Date(logDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                         </div>
-                        {l.mood && (
-                          <span className="text-xs text-muted-foreground" title={moodMeta[l.mood].label}>
-                            {moodMeta[l.mood].emoji} {moodMeta[l.mood].label}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {l.energy && <span className="text-xs text-muted-foreground">{energyMeta[l.energy]?.emoji}</span>}
+                          {l.mood && <span className="text-xs text-muted-foreground">{moodMeta[l.mood]?.emoji} {moodMeta[l.mood]?.label}</span>}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEdit(l.id, l.content)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => handleDelete(l.id)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        </div>
                       </div>
-                      {l.content && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{l.content}</p>}
+                      {isEditing ? (
+                        <div className="mt-2 space-y-2">
+                          <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={3} className="resize-none text-sm" autoFocus />
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" onClick={() => saveEdit(l.id)}>Save</Button>
+                            <Button size="sm" variant="outline" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </div>
+                      ) : l.content ? (
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{l.content}</p>
+                      ) : (
+                        <p className="mt-2 text-sm italic text-muted-foreground">Mood & energy check-in only</p>
+                      )}
                     </div>
                   </li>
                 )

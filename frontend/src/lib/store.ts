@@ -7,7 +7,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useUser } from "@/lib/auth/AuthProvider";
 
 const STORE_CHANGED_EVENT = "lifeflow:store-changed";
-const notifyStoreChanged = (scope: "goals" | "tasks" | "logs") => {
+const notifyStoreChanged = (scope: "goals" | "tasks" | "logs" | "reminders") => {
   window.dispatchEvent(new CustomEvent(STORE_CHANGED_EVENT, { detail: scope }));
 };
 
@@ -245,6 +245,86 @@ export const useLogs = () => {
     try {
       const data = await fetchJson<LogEntry[]>("/api/journal");
       if (mounted.current) setLogs(data);
+    } catch {
+      // Silently handle auth errors
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, [authLoading, user]);
+
+  // Fetch on mount only — no cross-tab sync for journal
+  useEffect(() => {
+    mounted.current = true;
+    refetch();
+    return () => { mounted.current = false; };
+  }, [refetch]);
+
+  const createLog = useCallback(
+    async (input: { content: string; mood?: number | null; energy?: number | null }) => {
+      const log = await fetchJson<LogEntry>("/api/journal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      setLogs((prev) => [log, ...prev]);
+      return log;
+    },
+    []
+  );
+
+  const updateLog = useCallback(
+    async (id: string, patch: Partial<Pick<LogEntry, "content" | "mood" | "energy">>) => {
+      const log = await fetchJson<LogEntry>(`/api/journal/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      setLogs((prev) => prev.map((l) => (l.id === id ? log : l)));
+      return log;
+    },
+    []
+  );
+
+  const deleteLog = useCallback(async (id: string) => {
+    setLogs((prev) => prev.filter((l) => l.id !== id));
+    await fetchJson(`/api/journal/${id}`, { method: "DELETE" });
+  }, []);
+
+  return { logs, loading, createLog, updateLog, deleteLog, refetch };
+};
+
+// ─── Reminder types ───────────────────────────────────────────────────────
+
+export type Reminder = {
+  id: string;
+  userId: string;
+  taskId: string;
+  remindAt: string;
+  message?: string | null;
+  status: "PENDING" | "SENT" | "DISMISSED";
+  createdAt: string;
+  task?: { id: string; title: string; dueDate: string | null; status: string };
+};
+
+// ─── useReminders ─────────────────────────────────────────────────────────
+
+export const useReminders = () => {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading } = useUser();
+  const mounted = useRef(false);
+
+  const refetch = useCallback(async () => {
+    if (authLoading) return;
+    if (!user) {
+      if (mounted.current) { setReminders([]); setLoading(false); }
+      return;
+    }
+    try {
+      const data = await fetchJson<Reminder[]>("/api/reminders");
+      if (mounted.current) setReminders(data);
+    } catch {
+      // Silently handle auth errors
     } finally {
       if (mounted.current) setLoading(false);
     }
@@ -257,44 +337,53 @@ export const useLogs = () => {
   }, [refetch]);
 
   useEffect(() => {
-    const handler = (e: Event) => { if ((e as CustomEvent).detail === "logs") refetch(); };
+    const handler = (e: Event) => { if ((e as CustomEvent).detail === "reminders") refetch(); };
     window.addEventListener(STORE_CHANGED_EVENT, handler);
     return () => window.removeEventListener(STORE_CHANGED_EVENT, handler);
   }, [refetch]);
 
-  const createLog = useCallback(
-    async (input: { content: string; mood?: number | null; energy?: number | null }) => {
-      const log = await fetchJson<LogEntry>("/api/journal", {
+  const createReminder = useCallback(
+    async (input: { taskId: string; remindAt: string; message?: string }) => {
+      const reminder = await fetchJson<Reminder>("/api/reminders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
       await refetch();
-      notifyStoreChanged("logs");
-      return log;
+      notifyStoreChanged("reminders");
+      return reminder;
     },
     [refetch]
   );
 
-  const updateLog = useCallback(
-    async (id: string, patch: Partial<Pick<LogEntry, "content" | "mood" | "energy">>) => {
-      setLogs((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-      const log = await fetchJson<LogEntry>(`/api/journal/${id}`, {
+  const updateReminder = useCallback(
+    async (id: string, patch: Partial<Pick<Reminder, "remindAt" | "message" | "status">>) => {
+      const reminder = await fetchJson<Reminder>(`/api/reminders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      notifyStoreChanged("logs");
-      return log;
+      setReminders((prev) => prev.map((r) => (r.id === id ? reminder : r)));
+      notifyStoreChanged("reminders");
+      return reminder;
     },
     []
   );
 
-  const deleteLog = useCallback(async (id: string) => {
-    setLogs((prev) => prev.filter((l) => l.id !== id));
-    await fetchJson(`/api/journal/${id}`, { method: "DELETE" });
-    notifyStoreChanged("logs");
+  const dismissReminder = useCallback(async (id: string) => {
+    const reminder = await fetchJson<Reminder>(`/api/reminders/${id}/dismiss`, {
+      method: "POST",
+    });
+    setReminders((prev) => prev.map((r) => (r.id === id ? reminder : r)));
+    notifyStoreChanged("reminders");
+    return reminder;
   }, []);
 
-  return { logs, loading, createLog, updateLog, deleteLog, refetch };
+  const deleteReminder = useCallback(async (id: string) => {
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+    await fetchJson(`/api/reminders/${id}`, { method: "DELETE" });
+    notifyStoreChanged("reminders");
+  }, []);
+
+  return { reminders, loading, createReminder, updateReminder, dismissReminder, deleteReminder, refetch };
 };

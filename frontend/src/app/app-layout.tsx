@@ -4,6 +4,8 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/lib/auth/AuthProvider"
 import { AppSidebar } from "@/components/app-sidebar"
+import { SearchCommand } from "@/components/search-command"
+import { ReminderBell } from "@/components/reminder-bell"
 import {
   SidebarInset,
   SidebarProvider,
@@ -27,7 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
-
+ 
   if (!user) return null
 
   return (
@@ -37,6 +39,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarInset className="min-w-0 flex-1">
           <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur">
             <SidebarTrigger />
+            <SearchCommand />
+            <ReminderBell />
             <div className="text-xs font-medium text-muted-foreground">LifeFlow</div>
           </header>
           <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">

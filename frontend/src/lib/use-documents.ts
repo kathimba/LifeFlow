@@ -8,6 +8,7 @@ import { useUser } from "@/lib/auth/AuthProvider"
 export type ApiDocument = {
   id: string
   title: string
+  description?: string | null
   fileName: string
   fileType: string
   fileSize: number
@@ -68,7 +69,7 @@ export const useDocuments = () => {
 
   // Update metadata (title, goalId, taskId)
   const update = useCallback(
-    async (id: string, patch: Partial<Pick<ApiDocument, "title" | "goalId" | "taskId">>) => {
+    async (id: string, patch: Partial<Pick<ApiDocument, "title" | "description" | "goalId" | "taskId">>) => {
       setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)))
       await fetch(`/api/documents/${id}`, {
         method: "PATCH",

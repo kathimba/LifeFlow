@@ -236,6 +236,13 @@ export default function DocumentsPage() {
                     placeholder="Untitled"
                     className="border-0 px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
                   />
+                  <textarea
+                    value={active.description ?? ""}
+                    onChange={(e) => update(active.id, { description: e.target.value || null })}
+                    placeholder="Add a caption or description..."
+                    rows={2}
+                    className="mt-2 w-full resize-none border-0 bg-transparent px-0 text-sm text-muted-foreground shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0"
+                  />
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span>{active.fileName}</span>
                     <span>{formatBytes(active.fileSize)}</span>

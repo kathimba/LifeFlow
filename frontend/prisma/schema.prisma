@@ -15,7 +15,7 @@ datasource db {
 }
 
 // ============================================================
-// PHASE 1 — CORE (build now)
+// PHASE 1 — CORE
 // ============================================================
 
 // ------------------------------------------------------------
@@ -37,8 +37,7 @@ model User {
   activityLogs   ActivityLog[]
 
   // Phase 2 (uncomment when ready)
-  // documents    Document[]
-  // reminders    Reminder[]
+  reminders    Reminder[]
 
   // Phase 3 (uncomment when ready)
   // embeddings   Embedding[]
@@ -75,11 +74,8 @@ model Goal {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tasks Task[]
+  tasks     Task[]
   documents Document[]
-
-  // Phase 2 (uncomment when ready)
-  // goalDocuments GoalDocument[]
 
   @@index([userId], name: "idx_goals_user")
   @@map("goals")
@@ -113,10 +109,9 @@ model Task {
   completedAt DateTime? @map("completed_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  // Phase 2 (uncomment when ready)
-  // reminders     Reminder[]
-  documents     Document[]
-  // taskDocuments TaskDocument[]
+  // Relations
+  documents Document[]
+  reminders    Reminder[]
 
   @@index([userId], name: "idx_tasks_user")
   @@index([goalId], name: "idx_tasks_goal")
@@ -140,9 +135,6 @@ model JournalEntry {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  // Phase 3 (uncomment when ready)
-  // embeddings Embedding[]
-
   @@index([userId], name: "idx_journal_user")
   @@map("journal_entries")
 }
@@ -165,6 +157,39 @@ model ActivityLog {
 
   @@index([userId], name: "idx_logs_user")
   @@map("activity_logs")
+}
+
+// ============================================================
+// PHASE 2 — ENRICH
+// ============================================================
+
+// ------------------------------------------------------------
+// 3.6 DOCUMENTS — Knowledge Layer
+// Stored in Cloudflare R2, metadata in Postgres
+// ------------------------------------------------------------
+model Document {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title         String
+  description   String?                       // User's caption/notes about the document
+  fileName      String   @map("file_name")
+  fileType      String   @map("file_type")    // mime type, e.g. "application/pdf"
+  fileSize      Int      @map("file_size")    // bytes
+  storageKey    String   @map("storage_key")  // path in R2 bucket
+  extractedText String?  @map("extracted_text") // populated by AI pipeline later
+
+  goalId        String?  @map("goal_id") @db.Uuid
+  goal          Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  taskId        String?  @map("task_id") @db.Uuid
+  task          Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([userId], name: "idx_documents_user")
+  @@map("documents")
 }
 
 // ============================================================
@@ -206,78 +231,36 @@ enum ActionType {
   @@map("action_type")
 }
 
-// ============================================================
-// PHASE 2 — ENRICH (uncomment when ready)
-// ============================================================
-
-// ------------------------------------------------------------
-// 3.5 DOCUMENTS — Knowledge Layer
-// ------------------------------------------------------------
-// model Document {
-//   id            String   @id @default(uuid()) @db.Uuid
-//   userId        String   @map("user_id") @db.Uuid
-//   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-//
-//   title         String?
-//   fileUrl       String   @map("file_url")
-//   extractedText String?  @map("extracted_text") // populated by AI pipeline
-//
-//   createdAt     DateTime @default(now()) @map("created_at")
-//
-//   taskDocuments TaskDocument[]
-//   goalDocuments GoalDocument[]
-//
-//   @@map("documents")
-// }
-
-// ------------------------------------------------------------
-// 3.6 LINKING TABLES — flexible many-to-many relationships
-// ------------------------------------------------------------
-// model TaskDocument {
-//   id         String   @id @default(uuid()) @db.Uuid
-//   taskId     String   @map("task_id") @db.Uuid
-//   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-//   documentId String   @map("document_id") @db.Uuid
-//   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-//
-//   @@map("task_documents")
-// }
-
-// model GoalDocument {
-//   id         String   @id @default(uuid()) @db.Uuid
-//   goalId     String   @map("goal_id") @db.Uuid
-//   goal       Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
-//   documentId String   @map("document_id") @db.Uuid
-//   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-//
-//   @@map("goal_documents")
-// }
-
 // ------------------------------------------------------------
 // 3.7 REMINDERS — Execution Intelligence Layer
 // ------------------------------------------------------------
-// model Reminder {
-//   id         String         @id @default(uuid()) @db.Uuid
-//   userId     String         @map("user_id") @db.Uuid
-//   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-//
-//   taskId     String         @map("task_id") @db.Uuid
-//   task       Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
-//
-//   remindAt   DateTime       @map("remind_at")
-//   recurrence String?
-//   status     ReminderStatus @default(PENDING)
-//
-//   @@map("reminders")
-// }
+model Reminder {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-// enum ReminderStatus {
-//   PENDING
-//   SENT
-//   DISMISSED
-//
-//   @@map("reminder_status")
-// }
+  taskId     String         @map("task_id") @db.Uuid
+  task       Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  remindAt   DateTime       @map("remind_at")
+  message    String?        // Custom reminder message (optional)
+  status     ReminderStatus @default(PENDING)
+
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  @@index([userId], name: "idx_reminders_user")
+  @@index([taskId], name: "idx_reminders_task")
+  @@index([status, remindAt], name: "idx_reminders_due")
+  @@map("reminders")
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  DISMISSED
+
+  @@map("reminder_status")
+}
 
 // ============================================================
 // PHASE 3 — AI LAYER (uncomment when ready)
@@ -286,7 +269,7 @@ enum ActionType {
 // ============================================================
 
 // ------------------------------------------------------------
-// 3.9 EMBEDDINGS — Semantic Intelligence Layer
+// 3.8 EMBEDDINGS — Semantic Intelligence Layer
 // Kept separate from core tables intentionally:
 // - Swap embedding models without touching core schema
 // - Re-index without side effects
@@ -309,45 +292,3 @@ enum ActionType {
 //
 //   @@map("embeddings")
 // }
-// ─────────────────────────────────────────────────────────────
-// PHASE 2 ADDITION — Document model
-// Add this to your existing schema.prisma, uncommenting the
-// Document section and adding the relation to User
-// ─────────────────────────────────────────────────────────────
-
-model Document {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title         String
-  fileName      String   @map("file_name")
-  fileType      String   @map("file_type")   // mime type, e.g. "application/pdf"
-  fileSize      Int      @map("file_size")   // bytes
-  storageKey    String   @map("storage_key") // path in R2 bucket
-  extractedText String?  @map("extracted_text") // populated by AI pipeline later
-
-  goalId        String?  @map("goal_id") @db.Uuid
-  goal          Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
-
-  taskId        String?  @map("task_id") @db.Uuid
-  task          Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  @@index([userId], name: "idx_documents_user")
-  @@map("documents")
-}
-
-// ─────────────────────────────────────────────────────────────
-// Add these relation fields to your existing models:
-//
-// In model User, add:
-//   documents Document[]
-//
-// In model Goal, add:
-//   documents Document[]
-//
-// In model Task, add:
-//   documents Document[]
-// ─────────────────────────────────────────────────────────────
