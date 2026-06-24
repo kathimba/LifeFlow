@@ -113,10 +113,19 @@ export async function getNextBestTasks(
 // ─── Daily Focus ────────────────────────────────────────────────────────────
 
 export type DailyFocus = {
-  task: ScoredTask["task"];
+  task: {
+    id: string;
+    title: string;
+    priority: number;
+    dueDate: string | null;
+    goal: { id: string; title: string } | null;
+    status: string;
+    createdAt: string;
+    completedAt: string | null;
+    recurrenceRule: string | null;
+  };
   reason: string;
 };
-
 /**
  * Pick the single best task for today, considering:
  * - Day of week patterns from activity history
@@ -211,7 +220,7 @@ export async function getDailyFocus(userId: string): Promise<DailyFocus | null> 
       goal: top.task.goal
         ? { id: top.task.goal.id, title: top.task.goal.title }
         : null,
-      status: top.task.status,
+      status: top.task.status as string,
       createdAt: top.task.createdAt.toISOString(),
       completedAt: top.task.completedAt?.toISOString() ?? null,
       recurrenceRule: top.task.recurrenceRule,

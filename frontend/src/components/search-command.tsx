@@ -20,7 +20,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+
 
 type SearchResult = {
   id: string;
@@ -30,6 +30,7 @@ type SearchResult = {
   url: string;
   metadata?: Record<string, any>;
   rank: number;
+  semanticScore?: number; 
 };
 
 const typeIcons = {

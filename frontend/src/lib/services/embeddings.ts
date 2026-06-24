@@ -123,11 +123,12 @@ export async function hybridSearch(
 
     if (existing) {
       existing.semanticScore = sem.semanticScore;
-      existing.hybridScore += 30; // appears in both = strong signal
+      existing.hybridScore += 30;
       existing.hybridScore += sem.semanticScore * 10;
     } else {
       resultMap.set(key, {
         ...sem,
+        type: sem.type as SearchResult["type"],
         hybridScore: sem.semanticScore * 15,
       });
     }
@@ -214,7 +215,7 @@ async function enrichSemanticResults(
 
     enriched.push({
       id: r.entityId,
-      type: r.entityType.toLowerCase(),
+      type: r.entityType.toLowerCase() as SearchEntityType,
       title,
       snippet,
       url,

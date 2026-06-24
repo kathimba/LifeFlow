@@ -1,4 +1,5 @@
 import { prisma } from "@lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export type NudgeType =
   | "stale_goal"
@@ -147,7 +148,7 @@ export async function getGoalNudges(userId: string): Promise<Nudge[]> {
       entityType: "TASK",
       action: "COMPLETED",
       createdAt: { gte: weekAgo },
-      metadata: { path: ["goalId"], not: null },
+      metadata: { path: ["goalId"], not: Prisma.JsonNullValueFilter.JsonNull },
     },
     select: { metadata: true },
   });

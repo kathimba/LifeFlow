@@ -1,5 +1,5 @@
 import { prisma } from "@lib/prisma";
-import { Prisma } from "@prisma/client";
+
 
 export type SearchEntityType = "task" | "goal" | "journal" | "document";
 
@@ -11,6 +11,7 @@ export type SearchResult = {
   url: string;
   metadata?: Record<string, any>;
   rank: number;
+  semanticScore?: number; 
 };
 
 export type SearchOptions = {

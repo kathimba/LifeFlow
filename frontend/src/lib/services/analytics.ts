@@ -1,4 +1,5 @@
 import { prisma } from "@lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export type WeeklyReview = {
   weekStart: string;
@@ -320,7 +321,7 @@ export async function getWeeklyScore(userId: string): Promise<WeeklyScore> {
     where: {
       userId, entityType: "TASK", action: "COMPLETED",
       createdAt: { gte: thisMonday, lte: thisSunday },
-      metadata: { path: ["goalId"], not: null },
+      metadata: { path: ["goalId"], not: Prisma.JsonNullValueFilter.JsonNull },
     },
   });
   const focus = completedThisWeek > 0 ? Math.round((completedWithGoal / completedThisWeek) * 100) : 0;
