@@ -45,10 +45,12 @@ export type Goal = {
   description?: string | null;
   status: GoalStatus;
   priorityWeight: number; // 1 (highest) -> 5 (lowest), matches DB directly
-  progress: number;       // server-calculated, always trust this
+  progress: number;       // server-calculated, (now recursive)
   targetDate?: string | null;
   parentGoalId?: string | null;
   createdAt: string;
+  subGoals?: Goal[];              // <-- added
+  tasks?: Task[];                 // <-- added (optional, for convenience)
 };
 
 export type LogEntry = {
@@ -220,9 +222,17 @@ export const useTasks = () => {
   const deleteTask = useCallback(async (id: string) => {
     const task = tasks.find((t) => t.id === id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    await fetchJson(`/api/tasks/${id}`, { method: "DELETE" });
-    notifyStoreChanged("tasks");
-    if (task?.goalId) notifyStoreChanged("goals");
+    try {
+      await fetchJson(`/api/tasks/${id}`, { method: "DELETE" });
+      notifyStoreChanged("tasks");
+      if (task?.goalId) notifyStoreChanged("goals");
+    } catch (err) {
+      // Task already deleted or not found — refetch to sync
+      if (err instanceof Error && err.message.includes("not found")) {
+        notifyStoreChanged("tasks");
+        if (task?.goalId) notifyStoreChanged("goals");
+      }
+    }
   }, [tasks]);
 
   return { tasks, loading, createTask, updateTask, deleteTask, refetch };

@@ -1,3 +1,4 @@
+import { upsertEmbedding, deleteEmbedding } from "./embeddings";
 import { prisma } from "@lib/prisma";
 import {
   logJournalCreated,
@@ -55,6 +56,8 @@ export async function createEntry(userId: string, input: JournalCreateInput) {
     energy: entry.energy,
   });
 
+  upsertEmbedding(userId, "JOURNAL", entry.id, entry.content).catch(console.error);
+
   return entry;
 }
 
@@ -84,6 +87,11 @@ export async function updateEntry(
     energy: entry.energy,
   });
 
+  if (input.content !== undefined) {
+    const updated = await prisma.journalEntry.findUnique({ where: { id: entryId }, select: { content: true } });
+    upsertEmbedding(userId, "JOURNAL", entryId, updated?.content ?? "").catch(console.error);
+  }
+
   return entry;
 }
 
@@ -98,6 +106,8 @@ export async function deleteEntry(userId: string, entryId: string) {
   await prisma.journalEntry.delete({ where: { id: entryId } });
 
   logJournalDeleted(userId, entryId);
+
+  deleteEmbedding(userId, "JOURNAL", entryId).catch(console.error);
 
   return { success: true };
 }

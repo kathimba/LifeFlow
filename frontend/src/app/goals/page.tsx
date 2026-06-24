@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Target, Trash2, Pencil, Link2, X, Flag } from "lucide-react"
+import { Plus, Target, Trash2, Pencil, Link2, X, Flag, ChevronRight } from "lucide-react"
 
 import AppLayout from "@/app/app-layout"
 import { PageHeader } from "@/components/page-header"
@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils"
 import { useGoals, useTasks, type Goal } from "@/lib/store"
 
 // priorityWeight 1 (highest) -> 5 (lowest), matches DB directly.
-// UI buckets 1-2 as "must", 3 as "should", 4-5 as "nice" for styling only.
 const weightBucket = (w: number): "must" | "should" | "nice" => (w <= 2 ? "must" : w === 3 ? "should" : "nice")
 
 const bucketStyles: Record<string, string> = {
@@ -42,10 +41,19 @@ export default function GoalsPage() {
   const [createTitle, setCreateTitle] = useState("")
   const [createDescription, setCreateDescription] = useState("")
   const [createPriorityWeight, setCreatePriorityWeight] = useState(3)
+  const [createParentGoalId, setCreateParentGoalId] = useState<string | null>(null) // new
 
   const [editTitle, setEditTitle] = useState("")
   const [editDescription, setEditDescription] = useState("")
   const [editPriorityWeight, setEditPriorityWeight] = useState(3)
+  const [editParentGoalId, setEditParentGoalId] = useState<string | null>(null)    // new
+
+  const [subGoalParentId, setSubGoalParentId] = useState<string | null>(null)
+  const [subGoalTitle, setSubGoalTitle] = useState("")
+  const [subGoalPriorityWeight, setSubGoalPriorityWeight] = useState(3)
+
+  // Only top‑level goals (no parent) can be selected as parents
+  const eligibleParents = useMemo(() => goals.filter(g => !g.parentGoalId), [goals])
 
   const sortedGoals = useMemo(() => {
     return [...goals].sort((a, b) => {
@@ -58,28 +66,51 @@ export default function GoalsPage() {
     setCreateTitle("")
     setCreateDescription("")
     setCreatePriorityWeight(3)
+    setCreateParentGoalId(null)
   }
 
   const addGoal = async () => {
     const v = createTitle.trim()
     if (!v) return
-    await createGoal({ title: v, description: createDescription.trim() || undefined, priorityWeight: createPriorityWeight })
+    await createGoal({
+      title: v,
+      description: createDescription.trim() || undefined,
+      priorityWeight: createPriorityWeight,
+      parentGoalId: createParentGoalId,
+    })
     resetCreate()
     setCreateOpen(false)
+  }
+
+  const addSubGoal = async () => {
+    const v = subGoalTitle.trim()
+    if (!v || !subGoalParentId) return
+    await createGoal({
+      title: v,
+      priorityWeight: subGoalPriorityWeight,
+      parentGoalId: subGoalParentId,
+    })
+    setSubGoalParentId(null)
+    setSubGoalTitle("")
+    setSubGoalPriorityWeight(3)
   }
 
   const submitEdit = async () => {
     if (!editingGoal) return
     const v = editTitle.trim()
     if (!v) return
-    await updateGoal(editingGoal.id, { title: v, description: editDescription.trim() || undefined, priorityWeight: editPriorityWeight })
+    await updateGoal(editingGoal.id, {
+      title: v,
+      description: editDescription.trim() || undefined,
+      priorityWeight: editPriorityWeight,
+      // Note: we are not sending parentGoalId in updateGoal – you could add it if needed.
+      // For now, parent linkage stays as originally created.
+    })
     setEditingGoal(null)
   }
 
   const removeGoal = async (id: string) => {
     await deleteGoal(id)
-    // Tasks linked to this goal are set to goalId: null server-side via SetNull —
-    // refetch via the store's event system handles syncing local task state.
   }
 
   const startEdit = (g: Goal) => {
@@ -87,6 +118,7 @@ export default function GoalsPage() {
     setEditTitle(g.title)
     setEditDescription(g.description ?? "")
     setEditPriorityWeight(g.priorityWeight)
+    // parentGoalId is not editable in this version
   }
 
   const toggleTaskDone = (taskId: string, currentStatus: string) => {
@@ -100,6 +132,252 @@ export default function GoalsPage() {
   }
 
   const unlinkedTasks = useMemo(() => tasks.filter((t) => !t.goalId && t.status !== "DONE"), [tasks])
+
+  // Helper to render a goal card (used for both top‑level and sub‑goals)
+  const renderGoalCard = (g: Goal, isSubGoal = false) => {
+    const linked = tasks.filter((t) => t.goalId === g.id)
+    const done = linked.filter((t) => t.status === "DONE").length
+    const total = linked.length
+    const pct = g.progress ?? 0
+    const bucket = weightBucket(g.priorityWeight)
+    const subGoals = g.subGoals || []
+
+    return (
+      <div key={g.id} className={cn("space-y-4", isSubGoal && "ml-6 border-l-2 border-border pl-4")}>
+        <AccordionItem value={g.id} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-secondary/30 transition-colors [&[data-state=open]>svg]:rotate-180">
+            <div className="flex w-full items-center gap-4 pr-4">
+              <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", bucketAccent[bucket])} />
+              <div className="min-w-0 flex-1 text-left">
+                <div className="flex items-center gap-2">
+                  <h3 className="truncate text-sm font-semibold">{g.title}</h3>
+                  <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", bucketStyles[bucket])}>
+                    {bucketLabel[bucket]}
+                  </span>
+                </div>
+                {g.description && <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{g.description}</p>}
+              </div>
+              <div className="hidden shrink-0 sm:block text-right">
+                <div className="text-xs font-medium">{pct}%</div>
+                <div className="text-[10px] text-muted-foreground">{done}/{total} tasks</div>
+              </div>
+              <div className="hidden w-24 shrink-0 md:block">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                  <div className={cn("h-full rounded-full transition-all", bucketAccent[bucket])} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="border-t border-border">
+            <div className="space-y-5 p-5">
+              {/* Progress section */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Progress</span>
+                  <span className="text-xs font-semibold">{done} of {total} tasks completed</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                  <div className={cn("h-full rounded-full transition-all", bucketAccent[bucket])} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+
+              {/* Sub‑goals (interactive) */}
+              {subGoals.length > 0 && (
+                <div>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sub‑goals</h4>
+                  <div className="space-y-3">
+                    {subGoals.map(sub => {
+                      const subLinked = tasks.filter(t => t.goalId === sub.id)
+                      const subDone = subLinked.filter(t => t.status === "DONE").length
+                      const subPct = sub.progress ?? 0
+                      return (
+                        <AccordionItem key={sub.id} value={sub.id} className="rounded-lg border border-border bg-secondary/10 overflow-hidden">
+                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-secondary/20 group [&[data-state=open]>svg]:rotate-180">
+                            <div className="flex items-center gap-3 w-full">
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              <div className="min-w-0 flex-1 text-left">
+                                <div className="text-sm font-medium truncate">{sub.title}</div>
+                                <div className="text-[10px] text-muted-foreground">{subDone}/{subLinked.length} tasks · {subPct}%</div>
+                              </div>
+                              <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
+                                <div className={cn("h-full rounded-full", bucketAccent[weightBucket(sub.priorityWeight)])} style={{ width: `${subPct}%` }} />
+                              </div>
+                              {/* Hover-only actions */}
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span
+                                  onClick={(e) => { e.stopPropagation(); startEdit(sub) }}
+                                  className="rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground cursor-pointer"
+                                  title="Edit"
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); startEdit(sub) } }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </span>
+                                <span
+                                  onClick={(e) => { e.stopPropagation(); removeGoal(sub.id) }}
+                                  className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
+                                  title="Delete"
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); removeGoal(sub.id) } }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </span>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="border-t border-border px-4 py-3">
+                            {/* Link tasks for this sub-goal */}
+                            <div>
+                              <div className="mb-2 flex items-center justify-between">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Linked tasks</span>
+                                {linkingGoalId === sub.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <Select onValueChange={(v) => linkTaskToGoal(v, sub.id)}>
+                                      <SelectTrigger className="h-7 w-44 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
+                                      <SelectContent>
+                                        {unlinkedTasks.length === 0 ? (
+                                          <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem>
+                                        ) : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
+                                      </SelectContent>
+                                    </Select>
+                                    <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                                  </div>
+                                ) : (
+                                  <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(sub.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                                    <Link2 className="h-3 w-3" />Link task
+                                  </button>
+                                )}
+                              </div>
+
+                              {subLinked.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-4 text-center">
+                                  <p className="text-[11px] text-muted-foreground">No tasks linked. Link existing tasks above.</p>
+                                </div>
+                              ) : (
+                                <ul className="divide-y divide-border rounded-lg border border-border">
+                                  {subLinked.map((t) => (
+                                    <li key={t.id} className="group flex items-center gap-3 px-3 py-2">
+                                      <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
+                                      <div className="min-w-0 flex-1">
+                                        <span className={cn("text-xs", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
+                                      </div>
+                                      <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task">
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick add sub-goal */}
+              {subGoalParentId === g.id ? (
+                <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                  <Input
+                    autoFocus
+                    placeholder="Sub-goal title..."
+                    value={subGoalTitle}
+                    onChange={(e) => setSubGoalTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addSubGoal()
+                      if (e.key === "Escape") setSubGoalParentId(null)
+                    }}
+                    className="h-8 text-xs"
+                  />
+                  <Select value={String(subGoalPriorityWeight)} onValueChange={(v) => setSubGoalPriorityWeight(Number(v))}>
+                    <SelectTrigger className="h-8 w-24 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Must-do</SelectItem>
+                      <SelectItem value="3">Should-do</SelectItem>
+                      <SelectItem value="5">Nice-to-do</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" className="h-8 text-xs" onClick={addSubGoal}>Add</Button>
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSubGoalParentId(null)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); setSubGoalParentId(g.id) }}
+                >
+                  <Plus className="mr-1 h-3 w-3" /> Add sub-goal
+                </Button>
+              )}
+
+              {/* Linked tasks */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Linked tasks</span>
+                  {linkingGoalId === g.id ? (
+                    <div className="flex items-center gap-2">
+                      <Select onValueChange={(v) => linkTaskToGoal(v, g.id)}>
+                        <SelectTrigger className="h-7 w-48 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
+                        <SelectContent>
+                          {unlinkedTasks.length === 0 ? (
+                            <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem>
+                          ) : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(g.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                      <Link2 className="h-3 w-3" />Link task
+                    </button>
+                  )}
+                </div>
+
+                {linked.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center">
+                    <p className="text-xs text-muted-foreground">No tasks linked yet. Add tasks from the Tasks page, or link existing ones above.</p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {linked.map((t) => (
+                      <li key={t.id} className="group flex items-center gap-3 px-3 py-2.5">
+                        <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <span className={cn("text-sm", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
+                          {t.dueDate && <span className="ml-2 text-[10px] text-muted-foreground">{t.dueDate.slice(0, 10)}</span>}
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); startEdit(g) }}>
+                  <Pencil className="mr-1.5 h-3 w-3" />Edit
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); removeGoal(g.id) }}>
+                  <Trash2 className="mr-1.5 h-3 w-3" />Delete
+                </Button>
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </div>
+    )
+  }
 
   return (
     <AppLayout>
@@ -118,108 +396,7 @@ export default function GoalsPage() {
             </div>
           ) : (
             <Accordion type="multiple" className="space-y-4">
-              {sortedGoals.map((g) => {
-                const linked = tasks.filter((t) => t.goalId === g.id)
-                const done = linked.filter((t) => t.status === "DONE").length
-                const total = linked.length
-                const pct = g.progress ?? 0 // server is source of truth — never recompute client-side
-                const bucket = weightBucket(g.priorityWeight)
-
-                return (
-                  <AccordionItem key={g.id} value={g.id} className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-                    <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-secondary/30 transition-colors [&[data-state=open]>svg]:rotate-180">
-                      <div className="flex w-full items-center gap-4 pr-4">
-                        <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", bucketAccent[bucket])} />
-                        <div className="min-w-0 flex-1 text-left">
-                          <div className="flex items-center gap-2">
-                            <h3 className="truncate text-sm font-semibold">{g.title}</h3>
-                            <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", bucketStyles[bucket])}>
-                              {bucketLabel[bucket]}
-                            </span>
-                          </div>
-                          {g.description && <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{g.description}</p>}
-                        </div>
-                        <div className="hidden shrink-0 sm:block text-right">
-                          <div className="text-xs font-medium">{pct}%</div>
-                          <div className="text-[10px] text-muted-foreground">{done}/{total} tasks</div>
-                        </div>
-                        <div className="hidden w-24 shrink-0 md:block">
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-                            <div className={cn("h-full rounded-full transition-all", bucketAccent[bucket])} style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                    </AccordionTrigger>
-
-                    <AccordionContent className="border-t border-border">
-                      <div className="space-y-5 p-5">
-                        <div>
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="text-xs font-medium text-muted-foreground">Progress</span>
-                            <span className="text-xs font-semibold">{done} of {total} tasks completed</span>
-                          </div>
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                            <div className={cn("h-full rounded-full transition-all", bucketAccent[bucket])} style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Linked tasks</span>
-                            {linkingGoalId === g.id ? (
-                              <div className="flex items-center gap-2">
-                                <Select onValueChange={(v) => linkTaskToGoal(v, g.id)}>
-                                  <SelectTrigger className="h-7 w-48 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
-                                  <SelectContent>
-                                    {unlinkedTasks.length === 0 ? (
-                                      <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem>
-                                    ) : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                                <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-                              </div>
-                            ) : (
-                              <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(g.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-                                <Link2 className="h-3 w-3" />Link task
-                              </button>
-                            )}
-                          </div>
-
-                          {linked.length === 0 ? (
-                            <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center">
-                              <p className="text-xs text-muted-foreground">No tasks linked yet. Add tasks from the Tasks page, or link existing ones above.</p>
-                            </div>
-                          ) : (
-                            <ul className="divide-y divide-border rounded-lg border border-border">
-                              {linked.map((t) => (
-                                <li key={t.id} className="group flex items-center gap-3 px-3 py-2.5">
-                                  <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
-                                  <div className="min-w-0 flex-1">
-                                    <span className={cn("text-sm", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
-                                    {t.dueDate && <span className="ml-2 text-[10px] text-muted-foreground">{t.dueDate.slice(0, 10)}</span>}
-                                  </div>
-                                  <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task">
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); startEdit(g) }}>
-                            <Pencil className="mr-1.5 h-3 w-3" />Edit
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); removeGoal(g.id) }}>
-                            <Trash2 className="mr-1.5 h-3 w-3" />Delete
-                          </Button>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              })}
+              {sortedGoals.map(g => renderGoalCard(g))}
             </Accordion>
           )}
         </div>
@@ -248,6 +425,18 @@ export default function GoalsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium">Parent goal (optional)</label>
+                <Select value={createParentGoalId ?? "__none__"} onValueChange={(v) => setCreateParentGoalId(v === "__none__" ? null : v)}>
+                  <SelectTrigger><SelectValue placeholder="None (top-level goal)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None (top-level goal)</SelectItem>
+                    {eligibleParents.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
@@ -256,7 +445,7 @@ export default function GoalsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Edit Goal Dialog */}
+        {/* Edit Goal Dialog (unchanged except added parent info display) */}
         <Dialog open={!!editingGoal} onOpenChange={(open) => !open && setEditingGoal(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>Edit Goal</DialogTitle></DialogHeader>
@@ -280,6 +469,11 @@ export default function GoalsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {editingGoal?.parentGoalId && (
+                <p className="text-xs text-muted-foreground">
+                  This is a sub‑goal of another goal. Parent linkage cannot be changed here.
+                </p>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditingGoal(null)}>Cancel</Button>

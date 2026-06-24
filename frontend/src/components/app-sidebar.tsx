@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard, CheckSquare, Target,
-  NotebookPen, FileText, Leaf, LogOut,
+  NotebookPen, FileText, Leaf, LogOut, BarChart3,
 } from "lucide-react"
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -20,6 +20,7 @@ const items = [
   { title: "Goals",     url: "/goals",     icon: Target },
   { title: "Daily Log", url: "/log",       icon: NotebookPen },
   { title: "Documents", url: "/documents", icon: FileText },
+  { title: "Analytics",  url: "/analytics", icon: BarChart3 },
 ] as const
 
 export function AppSidebar() {

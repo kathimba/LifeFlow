@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar as CalendarIcon, Repeat } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,14 @@ import { cn } from "@/lib/utils"
 import { useGoals, useTasks, type Task } from "@/lib/store"
 
 const NO_GOAL = "__none__"
+
+const recurrenceOptions = [
+  { value: "__none__", label: "No repeat" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "biweekly", label: "Biweekly" },
+  { value: "monthly", label: "Monthly" },
+]
 
 export function TaskModal({
   open,
@@ -40,8 +48,9 @@ export function TaskModal({
   const [title, setTitle] = useState(defaultTitle)
   const [description, setDescription] = useState("")
   const [dueDate, setDueDate] = useState<Date | undefined>(new Date())
-  const [priority, setPriority] = useState<number>(3) // 1=urgent .. 5=someday, matches DB directly
+  const [priority, setPriority] = useState<number>(3)
   const [goalId, setGoalId] = useState<string>(defaultGoalId ?? NO_GOAL)
+  const [recurrenceRule, setRecurrenceRule] = useState<string>("__none__")
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -52,6 +61,7 @@ export function TaskModal({
         setDueDate(new Date())
         setPriority(3)
         setGoalId(defaultGoalId ?? NO_GOAL)
+        setRecurrenceRule("__none__")
       })
     }
   }, [open, defaultTitle, defaultGoalId])
@@ -67,13 +77,30 @@ export function TaskModal({
         goalId: goalId === NO_GOAL ? null : goalId,
         dueDate: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
         priority,
+        recurrenceRule: recurrenceRule === "__none__" ? undefined : recurrenceRule,
       })
       onCreated?.(task)
       onOpenChange(false)
+    } catch {
+      // Silently handle errors — the store already throws
     } finally {
       setSubmitting(false)
     }
   }
+
+  // Add this helper to include all goals
+  const allGoals = useMemo(() => {
+    const flat: { id: string; title: string }[] = []
+    for (const g of goals) {
+      flat.push({ id: g.id, title: g.title })
+      if (g.subGoals) {
+        for (const sub of g.subGoals) {
+          flat.push({ id: sub.id, title: `↳ ${sub.title}` })
+        }
+      }
+    }
+    return flat
+  }, [goals])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -139,13 +166,33 @@ export function TaskModal({
               </Select>
             </div>
           </div>
+
           <div>
             <label className="mb-1.5 block text-xs font-medium">Link to goal</label>
             <Select value={goalId} onValueChange={setGoalId}>
               <SelectTrigger><SelectValue placeholder="No goal" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_GOAL}>No goal</SelectItem>
-                {goals.map((g) => <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>)}
+                {allGoals.map((g) => <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Recurrence */}
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium">
+              <Repeat className="h-3 w-3" />
+              Recurrence
+            </label>
+            <Select value={recurrenceRule} onValueChange={setRecurrenceRule}>
+              <SelectTrigger>
+                <SelectValue placeholder="No repeat" />
+              </SelectTrigger>
+              <SelectContent>
+                {recurrenceOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -153,6 +200,7 @@ export function TaskModal({
             Press <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px]">Enter</kbd> to save.
           </p>
         </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={submit} disabled={submitting}>{submitting ? "Creating…" : "Create task"}</Button>

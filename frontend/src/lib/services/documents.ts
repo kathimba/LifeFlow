@@ -2,6 +2,7 @@ import { prisma } from "@lib/prisma";
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET, buildStorageKey, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from "@/lib/r2";
+import { upsertEmbedding, deleteEmbedding } from "./embeddings";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,10 @@ export async function uploadDocument(
     },
   });
 
+  // Embed document
+  const docText = [document.title, document.description].filter(Boolean).join(" ");
+  upsertEmbedding(userId, "DOCUMENT", document.id, docText).catch(console.error);
+
   return document;
 }
 
@@ -141,7 +146,7 @@ export async function updateDocument(
     if (!task) throw new Error("Task not found");
   }
 
-  return prisma.document.update({
+  const updated = await prisma.document.update({
     where: { id: documentId },
     data: {
       ...(input.title !== undefined && { title: input.title }),
@@ -150,6 +155,14 @@ export async function updateDocument(
       ...(input.taskId !== undefined && { taskId: input.taskId }),
     },
   });
+
+  // Update embedding if title or description changed
+  if (input.title !== undefined || input.description !== undefined) {
+    const docText = [updated.title, updated.description].filter(Boolean).join(" ");
+    upsertEmbedding(userId, "DOCUMENT", documentId, docText).catch(console.error);
+  }
+
+  return updated;
 }
 
 export async function deleteDocument(userId: string, documentId: string) {
@@ -170,6 +183,9 @@ export async function deleteDocument(userId: string, documentId: string) {
 
   // Delete from DB
   await prisma.document.delete({ where: { id: documentId } });
+
+  // Delete embedding
+  deleteEmbedding(userId, "DOCUMENT", documentId).catch(console.error);
 
   return { success: true };
 }

@@ -40,7 +40,7 @@ model User {
   reminders    Reminder[]
 
   // Phase 3 (uncomment when ready)
-  // embeddings   Embedding[]
+  embeddings   Embedding[]
 
   @@map("users")
 }
@@ -275,20 +275,20 @@ enum ReminderStatus {
 // - Re-index without side effects
 // - Multiple embedding strategies possible per entity
 // ------------------------------------------------------------
-// model Embedding {
-//   id         String     @id @default(uuid()) @db.Uuid
-//   userId     String     @map("user_id") @db.Uuid
-//   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-//
-//   entityType EntityType @map("entity_type")
-//   entityId   String     @map("entity_id") @db.Uuid
-//
-//   // Requires prisma-client-py or raw SQL for VECTOR type
-//   // Prisma does not natively support pgvector yet —
-//   // use $queryRaw for insert/search until official support lands
-//   // embedding  Unsupported("vector(1536)")
-//
-//   createdAt  DateTime   @default(now()) @map("created_at")
-//
-//   @@map("embeddings")
-// }
+model Embedding {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  entityType EntityType @map("entity_type")
+  entityId   String     @map("entity_id") @db.Uuid
+
+  // pgvector column — Prisma doesn't natively support vector yet,
+  // so we use Unsupported to keep it in the schema, and raw SQL for queries.
+  embedding  Unsupported("vector(384)")
+
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([entityType, entityId], name: "idx_embeddings_entity")
+  @@map("embeddings")
+}

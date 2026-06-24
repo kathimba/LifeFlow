@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { TaskModal } from "@/components/task-modal"
 import { PriorityBadge } from "@/components/priority-badge"
 import { useGoals, useTasks, todayISO, addDays, priorityLabel, type Task, type TaskStatus } from "@/lib/store"
+import { RecommendedTask } from "@/components/recommended-task"
 
 type FilterTab = "all" | "today" | "upcoming" | "overdue" | "by-goal"
 type GroupBy = "none" | "priority" | "due-date"
@@ -31,7 +32,7 @@ const statusIcon: Record<TaskStatus, typeof Circle> = {
 export default function TasksPage() {
   const { tasks, updateTask, deleteTask } = useTasks()
   const { goals } = useGoals()
-  const [filter, setFilter] = useState<FilterTab>("all")
+  const [filter, setFilter] = useState<FilterTab>("today")
   const [groupBy, setGroupBy] = useState<GroupBy>("priority")
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -127,9 +128,16 @@ export default function TasksPage() {
           actions={<Button onClick={() => setModalOpen(true)}><Plus className="h-4 w-4" />Add task</Button>}
         />
 
+        <RecommendedTask />
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-1 overflow-x-auto pb-1 text-xs">
-            {([{key:"all",label:"All"},{key:"today",label:"Today"},{key:"upcoming",label:"Upcoming"},{key:"overdue",label:"Overdue"},{key:"by-goal",label:"By Goal"}] as {key:FilterTab;label:string}[]).map((f) => (
+            {([
+              {key:"overdue",label:"overdue"},
+              {key:"today",label:"Today"},
+              {key:"upcoming",label:"upcoming"},
+              {key:"by-goal",label:"By Goal"},
+              {key:"all",label:"All"}] as {key:FilterTab;label:string}[]).map((f) => (
               <button key={f.key} onClick={() => setFilter(f.key)} className={cn("rounded-md px-3 py-1.5 whitespace-nowrap capitalize transition-colors", filter === f.key ? "bg-secondary text-foreground font-medium" : "text-muted-foreground hover:text-foreground")}>{f.label}</button>
             ))}
           </div>

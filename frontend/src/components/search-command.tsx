@@ -74,7 +74,7 @@ export function SearchCommand() {
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/search?q=${encodeURIComponent(q)}&limit=10`
+        `/api/search?q=${encodeURIComponent(q)}&limit=10&mode=hybrid`
       );
       if (res.ok) {
         const data = await res.json();
@@ -153,6 +153,11 @@ export function SearchCommand() {
                           <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
                             {typeLabels[result.type]}
                           </span>
+                          {result.semanticScore && result.semanticScore > 0.5 && (
+                            <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                              AI
+                            </span>
+                          )}
                         </div>
                         {result.snippet && (
                           <p className="mt-0.5 truncate text-xs text-muted-foreground">

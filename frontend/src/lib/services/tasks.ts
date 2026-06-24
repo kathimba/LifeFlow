@@ -1,6 +1,8 @@
 import { prisma } from "@lib/prisma";
 import { logTaskCreated, logTaskCompleted, logTaskUpdated, logTaskDeleted } from "@lib/activity-log";
 import type { Prisma, TaskStatus } from "@prisma/client";
+import { upsertEmbedding, deleteEmbedding } from "./embeddings";
+import { recalculateGoalProgressRecursive } from "./goals";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -114,8 +116,11 @@ export async function createTask(userId: string, input: TaskCreateInput) {
 
   // Recalculate goal progress
   if (task.goalId) {
-    await recalculateGoalProgress(task.goalId, userId);
+    recalculateGoalProgress(task.goalId, userId).catch(console.error);
   }
+
+  const taskText = [task.title, task.description].filter(Boolean).join(" ");
+  upsertEmbedding(userId, "TASK", task.id, taskText).catch(console.error);
 
   return formatTaskResponse(task, userId);
 }
@@ -172,7 +177,7 @@ export async function updateTask(
       [existing.goalId, task.goalId].filter(Boolean) as string[]
     );
     for (const id of goalIds) {
-      await recalculateGoalProgress(id, userId);
+      recalculateGoalProgress(id, userId).catch(console.error);
     }
   }
 
@@ -182,12 +187,24 @@ export async function updateTask(
       title: task.title,
       goalId: task.goalId,
     });
+
+    // Auto-create next recurring task instance
+    if (task.recurrenceRule) {
+      const { createNextRecurringTask } = await import("./recurrence");
+      await createNextRecurringTask(userId, taskId);
+    }
   } else {
     logTaskUpdated(userId, task.id, {
       title: task.title,
       status: task.status,
       goalId: task.goalId,
     });
+  }
+
+  if (input.title !== undefined || input.description !== undefined) {
+    const updatedTask = await prisma.task.findUnique({ where: { id: taskId }, select: { title: true, description: true } });
+    const text = [updatedTask?.title, updatedTask?.description].filter(Boolean).join(" ");
+    upsertEmbedding(userId, "TASK", taskId, text).catch(console.error);
   }
 
   return formatTaskResponse(task, userId);
@@ -203,42 +220,22 @@ export async function deleteTask(userId: string, taskId: string) {
 
   await prisma.task.delete({ where: { id: taskId } });
 
+  deleteEmbedding(userId, "TASK", taskId).catch(console.error);
+
   logTaskDeleted(userId, taskId, {
     title: task.title,
     goalId: task.goalId,
   });
 
   if (task.goalId) {
-    await recalculateGoalProgress(task.goalId, userId);
+    recalculateGoalProgress(task.goalId, userId).catch(console.error);
   }
 
   return { success: true };
 }
 
 // ─── Shared helper ──────────────────────────────────────────────────────────
-
+// Delegate to the recursive version in goals service
 export async function recalculateGoalProgress(goalId: string, userId: string) {
-  const tasks = await prisma.task.findMany({
-    where: { goalId, userId, status: { not: "ARCHIVED" } },
-    select: { status: true },
-  });
-
-  if (tasks.length === 0) {
-    // Reset progress if no tasks
-    await prisma.goal.updateMany({
-      where: { id: goalId, userId },
-      data: { progress: 0 },
-    });
-    return 0;
-  }
-
-  const done = tasks.filter((t) => t.status === "DONE").length;
-  const progress = Math.round((done / tasks.length) * 100);
-
-  await prisma.goal.updateMany({
-    where: { id: goalId, userId },
-    data: { progress },
-  });
-
-  return progress;
+  await recalculateGoalProgressRecursive(goalId, userId);
 }
