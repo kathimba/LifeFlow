@@ -3,6 +3,7 @@ import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sd
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2, R2_BUCKET, buildStorageKey, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from "@/lib/r2";
 import { upsertEmbedding, deleteEmbedding } from "./embeddings";
+import { extractDocumentText } from "@/lib/embedding";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -95,27 +96,39 @@ export async function uploadDocument(
     })
   );
 
+  // Extract text from the file
+  let extractedText: string | null = null;
+  try {
+    extractedText = await extractDocumentText(buffer, file.name, file.type);
+  } catch (err) {
+    console.error("Text extraction failed:", err);
+  }
+
   // Create DB record
   const document = await prisma.document.create({
     data: {
       userId,
       title: title || file.name,
-      description: input.description ?? null, 
+      description: input.description ?? null,
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size,
       storageKey,
       goalId: goalId ?? null,
       taskId: taskId ?? null,
+      extractedText,
     },
   });
 
-  // Embed document
-  const docText = [document.title, document.description].filter(Boolean).join(" ");
+  // Embed document (title + description + extracted text)
+  const docText = [document.title, document.description, document.extractedText]
+    .filter(Boolean)
+    .join(" ");
   upsertEmbedding(userId, "DOCUMENT", document.id, docText).catch(console.error);
 
   return document;
 }
+ 
 
 export async function updateDocument(
   userId: string,

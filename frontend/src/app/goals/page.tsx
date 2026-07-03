@@ -32,7 +32,7 @@ const bucketLabel: Record<string, string> = {
 
 export default function GoalsPage() {
   const { goals, createGoal, updateGoal, deleteGoal } = useGoals()
-  const { tasks, updateTask } = useTasks()
+  const { tasks, updateTask, createTask } = useTasks()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
@@ -51,6 +51,11 @@ export default function GoalsPage() {
   const [subGoalParentId, setSubGoalParentId] = useState<string | null>(null)
   const [subGoalTitle, setSubGoalTitle] = useState("")
   const [subGoalPriorityWeight, setSubGoalPriorityWeight] = useState(3)
+
+  const [quickTaskGoalId, setQuickTaskGoalId] = useState<string | null>(null)
+  const [quickTaskTitle, setQuickTaskTitle] = useState("")
+  const [quickTaskPriority, setQuickTaskPriority] = useState(3)
+  const [quickTaskDueDate, setQuickTaskDueDate] = useState<string>("")
 
   // Only top‑level goals (no parent) can be selected as parents
   const eligibleParents = useMemo(() => goals.filter(g => !g.parentGoalId), [goals])
@@ -123,6 +128,25 @@ export default function GoalsPage() {
 
   const toggleTaskDone = (taskId: string, currentStatus: string) => {
     updateTask(taskId, { status: currentStatus === "DONE" ? "TODO" : "DONE" })
+  }
+
+  const resetQuickTask = () => {
+    setQuickTaskGoalId(null)
+    setQuickTaskTitle("")
+    setQuickTaskPriority(3)
+    setQuickTaskDueDate("")
+  }
+
+  const addQuickTask = async () => {
+    const v = quickTaskTitle.trim()
+    if (!v || !quickTaskGoalId) return
+    await createTask({
+      title: v,
+      goalId: quickTaskGoalId,
+      priority: quickTaskPriority,
+      dueDate: quickTaskDueDate || undefined,
+    })
+    resetQuickTask()
   }
 
   const unlinkTask = (taskId: string) => updateTask(taskId, { goalId: null })
@@ -231,7 +255,52 @@ export default function GoalsPage() {
                             {/* Link tasks for this sub-goal */}
                             <div>
                               <div className="mb-2 flex items-center justify-between">
-                                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Linked tasks</span>
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Tasks</span>
+                                {quickTaskGoalId === sub.id ? (
+                                  <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                                    <Input
+                                      autoFocus
+                                      placeholder="Task title..."
+                                      value={quickTaskTitle}
+                                      onChange={(e) => setQuickTaskTitle(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") addQuickTask()
+                                        if (e.key === "Escape") resetQuickTask()
+                                      }}
+                                      className="h-8 flex-1 text-xs"
+                                    />
+                                    <Input
+                                      type="date"
+                                      value={quickTaskDueDate}
+                                      onChange={(e) => setQuickTaskDueDate(e.target.value)}
+                                      className="h-8 w-36 text-xs"
+                                    />
+                                    <Select value={String(quickTaskPriority)} onValueChange={(v) => setQuickTaskPriority(Number(v))}>
+                                      <SelectTrigger className="h-8 w-20 text-xs">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="1">P1</SelectItem>
+                                        <SelectItem value="2">P2</SelectItem>
+                                        <SelectItem value="3">P3</SelectItem>
+                                        <SelectItem value="4">P4</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <Button size="sm" className="h-8 text-xs" onClick={addQuickTask}>Add</Button>
+                                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetQuickTask}>
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={(e) => { e.stopPropagation(); setQuickTaskGoalId(sub.id) }}
+                                  >
+                                    <Plus className="mr-1 h-3 w-3" /> Add task
+                                  </Button>
+                                )}
                                 {linkingGoalId === sub.id ? (
                                   <div className="flex items-center gap-2">
                                     <Select onValueChange={(v) => linkTaskToGoal(v, sub.id)}>
@@ -318,11 +387,57 @@ export default function GoalsPage() {
                   <Plus className="mr-1 h-3 w-3" /> Add sub-goal
                 </Button>
               )}
+              
 
               {/* Linked tasks */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Linked tasks</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tasks</span>
+                  {quickTaskGoalId === g.id ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                      <Input
+                        autoFocus
+                        placeholder="Task title..."
+                        value={quickTaskTitle}
+                        onChange={(e) => setQuickTaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addQuickTask()
+                          if (e.key === "Escape") resetQuickTask()
+                        }}
+                        className="h-8 flex-1 text-xs"
+                      />
+                      <Input
+                        type="date"
+                        value={quickTaskDueDate}
+                        onChange={(e) => setQuickTaskDueDate(e.target.value)}
+                        className="h-8 w-36 text-xs"
+                      />
+                      <Select value={String(quickTaskPriority)} onValueChange={(v) => setQuickTaskPriority(Number(v))}>
+                        <SelectTrigger className="h-8 w-20 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">P1</SelectItem>
+                          <SelectItem value="2">P2</SelectItem>
+                          <SelectItem value="3">P3</SelectItem>
+                          <SelectItem value="4">P4</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" className="h-8 text-xs" onClick={addQuickTask}>Add</Button>
+                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetQuickTask}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={(e) => { e.stopPropagation(); setQuickTaskGoalId(g.id) }}
+                    >
+                      <Plus className="mr-1 h-3 w-3" /> Add task
+                    </Button>
+                  )}
                   {linkingGoalId === g.id ? (
                     <div className="flex items-center gap-2">
                       <Select onValueChange={(v) => linkTaskToGoal(v, g.id)}>

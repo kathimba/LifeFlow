@@ -6,6 +6,7 @@ import { useUser } from "@/lib/auth/AuthProvider"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SearchCommand } from "@/components/search-command"
 import { ReminderBell } from "@/components/reminder-bell"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   SidebarInset,
   SidebarProvider,
@@ -42,6 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <SearchCommand />
             <div className="flex-1" />
             <ReminderBell />
+            <ThemeToggle />
           </header>
           <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
             {children}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useEffect } from "react"
+import { useRef, useState, useEffect, useMemo } from "react"
 import {
   FileText, Image as ImageIcon, FileType2, Trash2,
   UploadCloud, Target, CheckCircle2, Plus, Loader2,
@@ -106,6 +106,25 @@ export default function DocumentsPage() {
       setActiveId(next[0]?.id ?? null)
     }
   }
+
+  // Flatten goals + sub-goals
+  const allGoals = useMemo(() => {
+    const flat: { id: string; title: string }[] = []
+    for (const g of goals) {
+      flat.push({ id: g.id, title: g.title })
+      if (g.subGoals) {
+        for (const sub of g.subGoals) {
+          flat.push({ id: sub.id, title: `↳ ${sub.title}` })
+        }
+      }
+    }
+    return flat
+  }, [goals])
+
+  const openTasks = useMemo(
+    () => tasks.filter((t) => t.status !== "DONE" && t.status !== "ARCHIVED"),
+    [tasks]
+  )
 
   return (
     <AppLayout>
@@ -261,7 +280,7 @@ export default function DocumentsPage() {
                         <SelectTrigger><SelectValue placeholder="No goal" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value={NONE}>No goal</SelectItem>
-                          {goals.map((g) => <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>)}
+                          {allGoals.map((g) => <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -274,7 +293,7 @@ export default function DocumentsPage() {
                         <SelectTrigger><SelectValue placeholder="No task" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value={NONE}>No task</SelectItem>
-                          {tasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
+                          {openTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>

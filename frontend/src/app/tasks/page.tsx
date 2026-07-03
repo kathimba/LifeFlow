@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react"
 import {
   Plus, Trash2, Calendar as CalendarIcon, Target,
-  CheckCircle2, Circle, Clock, ListFilter,
+  CheckCircle2, Circle, Clock, ListFilter, Sparkles
 } from "lucide-react"
 
 import AppLayout from "@/app/app-layout"
@@ -18,6 +18,7 @@ import { TaskModal } from "@/components/task-modal"
 import { PriorityBadge } from "@/components/priority-badge"
 import { useGoals, useTasks, todayISO, addDays, priorityLabel, type Task, type TaskStatus } from "@/lib/store"
 import { RecommendedTask } from "@/components/recommended-task"
+import { PresetTasksDialog } from "@/components/preset-tasks-dialog"
 
 type FilterTab = "all" | "today" | "upcoming" | "overdue" | "by-goal"
 type GroupBy = "none" | "priority" | "due-date"
@@ -35,6 +36,7 @@ export default function TasksPage() {
   const [filter, setFilter] = useState<FilterTab>("today")
   const [groupBy, setGroupBy] = useState<GroupBy>("priority")
   const [modalOpen, setModalOpen] = useState(false)
+  const [presetOpen, setPresetOpen] = useState(false)
 
   const [dateCtx, setDateCtx] = useState<{ today: string; tomorrow: string; weekStart: string; weekEnd: string } | null>(null)
 
@@ -125,7 +127,16 @@ export default function TasksPage() {
         <PageHeader
           title="Tasks"
           description="One small step at a time, all tied back to a goal."
-          actions={<Button onClick={() => setModalOpen(true)}><Plus className="h-4 w-4" />Add task</Button>}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setPresetOpen(true)}>
+                <Sparkles className="h-4 w-4" /> Discover
+              </Button>
+              <Button onClick={() => setModalOpen(true)}>
+                <Plus className="h-4 w-4" /> Add task
+              </Button>
+            </div>
+          }
         />
 
         <RecommendedTask />
@@ -213,8 +224,8 @@ export default function TasksPage() {
             ))
           )}
         </div>
-
         <TaskModal open={modalOpen} onOpenChange={setModalOpen} />
+        <PresetTasksDialog open={presetOpen} onOpenChange={setPresetOpen} />
       </div>
     </AppLayout>
   )

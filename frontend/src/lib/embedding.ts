@@ -55,3 +55,24 @@ export async function semanticSearch(
     similarity: Number(r.similarity),
   }));
 }
+
+const EXTRACT_URL = `${EMBEDDING_SERVICE_URL}/extract-text`;
+
+export async function extractDocumentText(
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string
+): Promise<string> {
+  const formData = new FormData();
+  const blob = new Blob([fileBuffer], { type: mimeType });
+  formData.append("file", blob, fileName);
+
+  const res = await fetch(EXTRACT_URL, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) return "";
+  const data = await res.json();
+  return data.text || "";
+}

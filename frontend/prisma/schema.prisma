@@ -2,7 +2,7 @@
 // LifeFlow — Prisma Schema
 // Phase 1 entities: User, Goal, Task, JournalEntry, ActivityLog
 // Phase 2 entities: Document, TaskDocument, GoalDocument, Reminder
-// Phase 3 entities: Embedding (commented out)
+// Phase 3 entities: Embedding 
 // ============================================================
 
 generator client {
@@ -14,13 +14,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================
-// PHASE 1 — CORE
-// ============================================================
-
-// ------------------------------------------------------------
-// 3.1 USERS
-// ------------------------------------------------------------
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
@@ -29,51 +22,32 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  // Relations
   goals          Goal[]
   tasks          Task[]
   journalEntries JournalEntry[]
   documents      Document[]
   activityLogs   ActivityLog[]
-
-  // Phase 2 (uncomment when ready)
-  reminders    Reminder[]
-
-  // Phase 3 (uncomment when ready)
-  embeddings   Embedding[]
+  reminders      Reminder[]
+  embeddings     Embedding[]
 
   @@map("users")
 }
 
-// ------------------------------------------------------------
-// 3.2 GOALS — North Star System
-// Self-referencing for OKR-style goal trees
-// ------------------------------------------------------------
 model Goal {
   id          String     @id @default(uuid()) @db.Uuid
   userId      String     @map("user_id") @db.Uuid
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   title       String
   description String?
-
-  // 1 (highest priority) → 5 (lowest priority)
   priorityWeight Int        @default(3) @map("priority_weight")
   status         GoalStatus @default(ACTIVE)
-
-  // Computed by application layer — not DB-calculated
   progress    Float    @default(0)
   targetDate  DateTime? @map("target_date") @db.Date
-
-  // Self-referencing: enables goal trees (OKR sub-goals)
   parentGoalId String? @map("parent_goal_id") @db.Uuid
   parentGoal   Goal?   @relation("GoalHierarchy", fields: [parentGoalId], references: [id])
   subGoals     Goal[]  @relation("GoalHierarchy")
-
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  // Relations
   tasks     Task[]
   documents Document[]
 
@@ -81,171 +55,86 @@ model Goal {
   @@map("goals")
 }
 
-// ------------------------------------------------------------
-// 3.3 TASKS — Execution Layer
-// Always optionally linked to a Goal (no orphaned work)
-// ------------------------------------------------------------
 model Task {
   id          String     @id @default(uuid()) @db.Uuid
   userId      String     @map("user_id") @db.Uuid
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   goalId      String?    @map("goal_id") @db.Uuid
   goal        Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
-
   title       String
   description String?
-
   status      TaskStatus @default(TODO)
-
-  // 1 (urgent) → 5 (low)
   priority    Int        @default(3)
   dueDate     DateTime?  @map("due_date")
-
-  // RRULE format for recurring tasks (e.g. "FREQ=DAILY;INTERVAL=1")
   recurrenceRule String? @map("recurrence_rule")
-
   createdAt   DateTime  @default(now()) @map("created_at")
   completedAt DateTime? @map("completed_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  documents Document[]
-  reminders    Reminder[]
+  documents   Document[]
+  reminders   Reminder[]
 
   @@index([userId], name: "idx_tasks_user")
   @@index([goalId], name: "idx_tasks_goal")
   @@map("tasks")
 }
 
-// ------------------------------------------------------------
-// 3.4 JOURNAL ENTRIES — Critical for AI (behavioral dataset)
-// mood + energy = behavioral signals for recommendation engine
-// ------------------------------------------------------------
 model JournalEntry {
   id      String @id @default(uuid()) @db.Uuid
   userId  String @map("user_id") @db.Uuid
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   content String
-
-  // 1–5 scale — fuel for the AI layer later
   mood   Int?
   energy Int?
-
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId], name: "idx_journal_user")
   @@map("journal_entries")
 }
 
-// ------------------------------------------------------------
-// 3.5 ACTIVITY LOG — System Event Tracking
-// Future ML training dataset. Track everything silently.
-// ------------------------------------------------------------
 model ActivityLog {
   id         String     @id @default(uuid()) @db.Uuid
   userId     String     @map("user_id") @db.Uuid
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   entityType EntityType @map("entity_type")
   entityId   String     @map("entity_id") @db.Uuid
   action     ActionType
   metadata   Json?
-
   createdAt  DateTime   @default(now()) @map("created_at")
 
   @@index([userId], name: "idx_logs_user")
   @@map("activity_logs")
 }
 
-// ============================================================
-// PHASE 2 — ENRICH
-// ============================================================
-
-// ------------------------------------------------------------
-// 3.6 DOCUMENTS — Knowledge Layer
-// Stored in Cloudflare R2, metadata in Postgres
-// ------------------------------------------------------------
 model Document {
   id            String   @id @default(uuid()) @db.Uuid
   userId        String   @map("user_id") @db.Uuid
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   title         String
-  description   String?                       // User's caption/notes about the document
+  description   String?
   fileName      String   @map("file_name")
-  fileType      String   @map("file_type")    // mime type, e.g. "application/pdf"
-  fileSize      Int      @map("file_size")    // bytes
-  storageKey    String   @map("storage_key")  // path in R2 bucket
-  extractedText String?  @map("extracted_text") // populated by AI pipeline later
-
+  fileType      String   @map("file_type")
+  fileSize      Int      @map("file_size")
+  storageKey    String   @map("storage_key")
+  extractedText String?  @map("extracted_text")
   goalId        String?  @map("goal_id") @db.Uuid
   goal          Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
-
   taskId        String?  @map("task_id") @db.Uuid
   task          Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
-
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([userId], name: "idx_documents_user")
   @@map("documents")
 }
 
-// ============================================================
-// ENUMS
-// ============================================================
-
-enum GoalStatus {
-  ACTIVE
-  PAUSED
-  COMPLETED
-
-  @@map("goal_status")
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-  ARCHIVED
-
-  @@map("task_status")
-}
-
-enum EntityType {
-  TASK
-  GOAL
-  JOURNAL
-  DOCUMENT
-
-  @@map("entity_type")
-}
-
-enum ActionType {
-  CREATED
-  UPDATED
-  COMPLETED
-  DELETED
-
-  @@map("action_type")
-}
-
-// ------------------------------------------------------------
-// 3.7 REMINDERS — Execution Intelligence Layer
-// ------------------------------------------------------------
 model Reminder {
   id         String         @id @default(uuid()) @db.Uuid
   userId     String         @map("user_id") @db.Uuid
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   taskId     String         @map("task_id") @db.Uuid
   task       Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
   remindAt   DateTime       @map("remind_at")
-  message    String?        // Custom reminder message (optional)
+  message    String?
   status     ReminderStatus @default(PENDING)
-
   createdAt  DateTime       @default(now()) @map("created_at")
 
   @@index([userId], name: "idx_reminders_user")
@@ -254,41 +143,53 @@ model Reminder {
   @@map("reminders")
 }
 
-enum ReminderStatus {
-  PENDING
-  SENT
-  DISMISSED
-
-  @@map("reminder_status")
-}
-
-// ============================================================
-// PHASE 3 — AI LAYER (uncomment when ready)
-// Requires: pgvector extension enabled on your Postgres instance
-// Run first: CREATE EXTENSION IF NOT EXISTS vector;
-// ============================================================
-
-// ------------------------------------------------------------
-// 3.8 EMBEDDINGS — Semantic Intelligence Layer
-// Kept separate from core tables intentionally:
-// - Swap embedding models without touching core schema
-// - Re-index without side effects
-// - Multiple embedding strategies possible per entity
-// ------------------------------------------------------------
 model Embedding {
   id         String     @id @default(uuid()) @db.Uuid
   userId     String     @map("user_id") @db.Uuid
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   entityType EntityType @map("entity_type")
   entityId   String     @map("entity_id") @db.Uuid
-
-  // pgvector column — Prisma doesn't natively support vector yet,
-  // so we use Unsupported to keep it in the schema, and raw SQL for queries.
   embedding  Unsupported("vector(384)")
-
   createdAt  DateTime   @default(now()) @map("created_at")
 
   @@index([entityType, entityId], name: "idx_embeddings_entity")
   @@map("embeddings")
+}
+
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  @@map("goal_status")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  ARCHIVED
+  @@map("task_status")
+}
+
+enum EntityType {
+  TASK
+  GOAL
+  JOURNAL
+  DOCUMENT
+  @@map("entity_type")
+}
+
+enum ActionType {
+  CREATED
+  UPDATED
+  COMPLETED
+  DELETED
+  @@map("action_type")
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  DISMISSED
+  @@map("reminder_status")
 }

@@ -23,20 +23,17 @@ function formatDateRange(start: string, end: string) {
   return `${s.toLocaleDateString(undefined, opts)} – ${e.toLocaleDateString(undefined, opts)}`
 }
 
-const moodEmoji = (v: number) => {
-  if (v >= 4.5) return "🤩"
-  if (v >= 3.5) return "🙂"
-  if (v >= 2.5) return "😐"
-  if (v >= 1.5) return "😕"
-  return "😣"
+const moodIcon = (v: number) => {
+  if (v >= 4) return { icon: Smile, label: "Great", color: "text-green-500" }
+  if (v >= 3) return { icon: Smile, label: "Good", color: "text-blue-500" }
+  if (v >= 2) return { icon: Smile, label: "Okay", color: "text-yellow-500" }
+  return { icon: Smile, label: "Low", color: "text-orange-500" }
 }
 
-const energyEmoji = (v: number) => {
-  if (v >= 4.5) return "🚀"
-  if (v >= 3.5) return "⚡"
-  if (v >= 2.5) return "🔋"
-  if (v >= 1.5) return "🪫"
-  return "😴"
+const energyIcon = (v: number) => {
+  if (v >= 4) return { icon: Zap, label: "High", color: "text-green-500" }
+  if (v >= 2) return { icon: Zap, label: "Medium", color: "text-yellow-500" }
+  return { icon: Zap, label: "Low", color: "text-orange-500" }
 }
 
 export function WeeklyReview() {
@@ -93,18 +90,26 @@ export function WeeklyReview() {
         {/* Mood + Energy row */}
         {(review.averageMood || review.averageEnergy) && (
           <div className="grid grid-cols-2 gap-3">
-            {review.averageMood && (
-              <div className="rounded-lg bg-secondary/50 p-3 text-center">
-                <div className="text-2xl">{moodEmoji(review.averageMood)}</div>
-                <div className="text-xs text-muted-foreground mt-1">Avg Mood</div>
-              </div>
-            )}
-            {review.averageEnergy && (
-              <div className="rounded-lg bg-secondary/50 p-3 text-center">
-                <div className="text-2xl">{energyEmoji(review.averageEnergy)}</div>
-                <div className="text-xs text-muted-foreground mt-1">Avg Energy</div>
-              </div>
-            )}
+            {review.averageMood && (() => {
+              const { icon: MoodIcon, label, color } = moodIcon(review.averageMood)
+              return (
+                <div className="rounded-lg bg-secondary/50 p-3 text-center">
+                  <MoodIcon className={`mx-auto h-5 w-5 ${color}`} />
+                  <div className="text-xs text-muted-foreground mt-1">Avg Mood</div>
+                  <div className="text-sm font-medium">{label}</div>
+                </div>
+              )
+            })()}
+            {review.averageEnergy && (() => {
+              const { icon: EnergyIcon, label, color } = energyIcon(review.averageEnergy)
+              return (
+                <div className="rounded-lg bg-secondary/50 p-3 text-center">
+                  <EnergyIcon className={`mx-auto h-5 w-5 ${color}`} />
+                  <div className="text-xs text-muted-foreground mt-1">Avg Energy</div>
+                  <div className="text-sm font-medium">{label}</div>
+                </div>
+              )
+            })()}
           </div>
         )}
 

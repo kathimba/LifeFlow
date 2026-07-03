@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Flame, CheckCircle2, Circle, Zap, Calendar } from "lucide-react"
+import { Flame, CheckCircle2, Circle, Zap, Calendar, Sparkles } from "lucide-react"
 
 import AppLayout from "@/app/app-layout"
 import { PageHeader } from "@/components/page-header"
@@ -12,9 +12,9 @@ import { Badge } from "@/components/ui/badge"
 import { TaskModal } from "@/components/task-modal"
 import { PriorityBadge } from "@/components/priority-badge"
 import { useTasks, useGoals, todayISO, addDays } from "@/lib/store"
-import { RecommendedTask } from "@/components/recommended-task"
 import { GoalInsights } from "@/components/goal-insights"
 import { DailyFocusCard } from "@/components/daily-focus"
+import { PresetTasksDialog } from "@/components/preset-tasks-dialog"
 
 function parseQuickCapture(input: string): { title: string; dueDate: string | null; priority: number } {
   let title = input.trim()
@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [taskModalOpen, setTaskModalOpen] = useState(false)
   const [modalDefaultTitle, setModalDefaultTitle] = useState("")
   const [headerText, setHeaderText] = useState({ greeting: "Welcome", date: "" })
+  const [presetOpen, setPresetOpen] = useState(false)
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -100,6 +101,16 @@ export default function Dashboard() {
               <button key={d.value} onClick={() => setCaptureInput((prev) => prev ? `${prev} ${d.value}` : d.value)} className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">+ {d.label}</button>
             ))}
           </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-xs text-muted-foreground">Need ideas?</span>
+            <button
+              onClick={() => setPresetOpen(true)}
+              className="text-xs font-medium text-blue-500 hover:text-blue-600 hover:underline transition-colors"
+            >
+              Browse Presets Tasks
+            </button>
+          </div>
         </section>
 
         {/* Today's Focus */}
@@ -150,6 +161,7 @@ export default function Dashboard() {
 
         <TaskModal open={taskModalOpen} onOpenChange={setTaskModalOpen} defaultTitle={modalDefaultTitle} onCreated={() => setCaptureInput("")} />
       </div>
+      <PresetTasksDialog open={presetOpen} onOpenChange={setPresetOpen} />
     </AppLayout>
   )
 }

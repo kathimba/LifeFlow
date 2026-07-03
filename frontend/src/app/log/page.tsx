@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react"
-import { NotebookPen, Check, Trash2, Pencil, X, Flame } from "lucide-react"
+import { NotebookPen, Check, Trash2, Pencil, X, Flame, Frown, Meh, Smile, BatteryLow, BatteryFull, Sparkles } from "lucide-react"
 
 import AppLayout from "@/app/app-layout"
 import { PageHeader } from "@/components/page-header"
@@ -9,25 +9,22 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useLogs, todayISO, addDays } from "@/lib/store"
+import { SimilarEntries } from "@/components/similar-entries"
 
-const moodMeta: Record<number, { label: string; emoji: string }> = {
-  1: { label: "Rough", emoji: "😣" },
-  2: { label: "Low",   emoji: "😕" },
-  3: { label: "Okay",  emoji: "😐" },
-  4: { label: "Good",  emoji: "🙂" },
-  5: { label: "Great", emoji: "🤩" },
+// Mood — 3 levels 
+const moodMeta: Record<number, { label: string; Icon: typeof Frown }> = {
+  1: { label: "Low",   Icon: Frown },
+  3: { label: "Okay",  Icon: Meh },
+  5: { label: "Great", Icon: Smile },
 }
 
-const energyMeta: Record<number, { label: string; emoji: string }> = {
-  1: { label: "Drained",  emoji: "🪫" },
-  2: { label: "Low",      emoji: "⚡" },
-  3: { label: "Steady",   emoji: "🔋" },
-  4: { label: "Energetic", emoji: "⚡" },
-  5: { label: "Flying",   emoji: "🚀" },
+const energyMeta: Record<number, { label: string; Icon: typeof BatteryLow }> = {
+  1: { label: "Low",   Icon: BatteryLow },
+  5: { label: "High",  Icon: BatteryFull },
 }
 
-const moodOptions = [5, 4, 3, 2, 1]
-const energyOptions = [5, 4, 3, 2, 1]
+const moodOptions = [5, 3, 1]
+const energyOptions = [5, 1]
 
 const getDate = (iso: string) => iso.slice(0, 10)
 
@@ -66,6 +63,7 @@ export default function LogPage() {
   const [savedFlash, setSavedFlash] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState("")
+  const [expandedSimilar, setExpandedSimilar] = useState<string | null>(null)
 
   // Refs so save() always reads latest values
   const contentRef = useRef(content)
@@ -187,25 +185,33 @@ const save = useCallback(async () => {
           <div>
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mood</h2>
             <div className="flex flex-wrap gap-2">
-              {moodOptions.map((m) => (
-                <button key={m} onClick={() => handleMoodChange(mood === m ? undefined : m)}
-                  className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                    mood === m ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
-                  <span className="text-base leading-none">{moodMeta[m].emoji}</span>{moodMeta[m].label}
-                </button>
-              ))}
+              {moodOptions.map((m) => {
+                const { Icon } = moodMeta[m]
+                return (
+                  <button key={m} onClick={() => handleMoodChange(mood === m ? undefined : m)}
+                    className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                      mood === m ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
+                    <Icon className="h-4 w-4" />
+                    {moodMeta[m].label}
+                  </button>
+                )
+              })}
             </div>
           </div>
           <div>
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Energy</h2>
             <div className="flex flex-wrap gap-2">
-              {energyOptions.map((e) => (
-                <button key={e} onClick={() => handleEnergyChange(energy === e ? undefined : e)}
-                  className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                    energy === e ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
-                  <span className="text-base leading-none">{energyMeta[e].emoji}</span>{energyMeta[e].label}
-                </button>
-              ))}
+              {energyOptions.map((e) => {
+                const { Icon } = energyMeta[e]
+                return (
+                  <button key={e} onClick={() => handleEnergyChange(energy === e ? undefined : e)}
+                    className={cn("flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                      energy === e ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground")}>
+                    <Icon className="h-4 w-4" />
+                    {energyMeta[e].label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         </section>
@@ -232,8 +238,22 @@ const save = useCallback(async () => {
                           {new Date(logDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
                         </div>
                         <div className="flex items-center gap-2">
-                          {l.energy && <span className="text-xs text-muted-foreground">{energyMeta[l.energy]?.emoji}</span>}
-                          {l.mood && <span className="text-xs text-muted-foreground">{moodMeta[l.mood]?.emoji} {moodMeta[l.mood]?.label}</span>}
+                          {l.energy && energyMeta[l.energy] && (() => {
+                            const EnergyIcon = energyMeta[l.energy].Icon
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                <EnergyIcon className="h-3.5 w-3.5 inline" /> {energyMeta[l.energy].label}
+                              </span>
+                            )
+                          })()}
+                          {l.mood && moodMeta[l.mood] && (() => {
+                            const MoodIcon = moodMeta[l.mood].Icon
+                            return (
+                              <span className="text-xs text-muted-foreground">
+                                <MoodIcon className="h-3.5 w-3.5 inline" /> {moodMeta[l.mood].label}
+                              </span>
+                            )
+                          })()}
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => startEdit(l.id, l.content)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
                             <button onClick={() => handleDelete(l.id)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -253,6 +273,19 @@ const save = useCallback(async () => {
                       ) : (
                         <p className="mt-2 text-sm italic text-muted-foreground">Mood & energy check-in only</p>
                       )}
+                      {/* Similar entries toggle */}
+                      {/* Similar entries toggle */}
+                      <div className="mt-3 border-t border-border pt-3">
+                        <button
+                          onClick={() => setExpandedSimilar(expandedSimilar === l.id ? null : l.id)}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                        >
+                          <span className="flex h-4 w-4 items-center justify-center rounded border border-border text-[10px] group-hover:border-foreground/30 transition-colors">
+                            {expandedSimilar === l.id ? "▾" : "▸"}
+                          </span>
+                        </button>
+                        {expandedSimilar === l.id && <SimilarEntries entryId={l.id} />}
+                      </div>
                     </div>
                   </li>
                 )

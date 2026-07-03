@@ -153,7 +153,7 @@ export default function RemindersPage() {
               </Select>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium">Remind at</label>
+              <label className="mb-1.5 block text-xs font-medium">Remind At</label>
               <Input
                 type="datetime-local"
                 value={remindAt}
