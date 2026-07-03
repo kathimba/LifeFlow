@@ -64,7 +64,7 @@ export async function extractDocumentText(
   mimeType: string
 ): Promise<string> {
   const formData = new FormData();
-  const blob = new Blob([fileBuffer], { type: mimeType });
+  const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType });
   formData.append("file", blob, fileName);
 
   const res = await fetch(EXTRACT_URL, {
