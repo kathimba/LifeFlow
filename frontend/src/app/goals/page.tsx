@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
@@ -41,12 +41,12 @@ export default function GoalsPage() {
   const [createTitle, setCreateTitle] = useState("")
   const [createDescription, setCreateDescription] = useState("")
   const [createPriorityWeight, setCreatePriorityWeight] = useState(3)
-  const [createParentGoalId, setCreateParentGoalId] = useState<string | null>(null) // new
+  const [createParentGoalId, setCreateParentGoalId] = useState<string | null>(null)
 
   const [editTitle, setEditTitle] = useState("")
   const [editDescription, setEditDescription] = useState("")
   const [editPriorityWeight, setEditPriorityWeight] = useState(3)
-  const [editParentGoalId, setEditParentGoalId] = useState<string | null>(null)    // new
+  const [editParentGoalId, setEditParentGoalId] = useState<string | null>(null)
 
   const [subGoalParentId, setSubGoalParentId] = useState<string | null>(null)
   const [subGoalTitle, setSubGoalTitle] = useState("")
@@ -57,7 +57,11 @@ export default function GoalsPage() {
   const [quickTaskPriority, setQuickTaskPriority] = useState(3)
   const [quickTaskDueDate, setQuickTaskDueDate] = useState<string>("")
 
-  // Only top‑level goals (no parent) can be selected as parents
+  // Delete confirmation state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteConfirmTitle, setDeleteConfirmTitle] = useState("")
+  const [deleteIsSubGoal, setDeleteIsSubGoal] = useState(false)
+
   const eligibleParents = useMemo(() => goals.filter(g => !g.parentGoalId), [goals])
 
   const sortedGoals = useMemo(() => {
@@ -108,8 +112,6 @@ export default function GoalsPage() {
       title: v,
       description: editDescription.trim() || undefined,
       priorityWeight: editPriorityWeight,
-      // Note: we are not sending parentGoalId in updateGoal – you could add it if needed.
-      // For now, parent linkage stays as originally created.
     })
     setEditingGoal(null)
   }
@@ -118,12 +120,23 @@ export default function GoalsPage() {
     await deleteGoal(id)
   }
 
+  const confirmDelete = (g: Goal, isSub: boolean) => {
+    setDeleteConfirmId(g.id)
+    setDeleteConfirmTitle(g.title)
+    setDeleteIsSubGoal(isSub)
+  }
+
+  const executeDelete = async () => {
+    if (!deleteConfirmId) return
+    await removeGoal(deleteConfirmId)
+    setDeleteConfirmId(null)
+  }
+
   const startEdit = (g: Goal) => {
     setEditingGoal(g)
     setEditTitle(g.title)
     setEditDescription(g.description ?? "")
     setEditPriorityWeight(g.priorityWeight)
-    // parentGoalId is not editable in this version
   }
 
   const toggleTaskDone = (taskId: string, currentStatus: string) => {
@@ -157,9 +170,8 @@ export default function GoalsPage() {
 
   const unlinkedTasks = useMemo(() => tasks.filter((t) => !t.goalId && t.status !== "DONE"), [tasks])
 
-  // Helper to render a goal card (used for both top‑level and sub‑goals)
   const renderGoalCard = (g: Goal, isSubGoal = false) => {
-    const linked = tasks.filter((t) => t.goalId === g.id)
+    const linked = tasks.filter((t) => t.goalId === g.id && t.status !== "DONE")
     const done = linked.filter((t) => t.status === "DONE").length
     const total = linked.length
     const pct = g.progress ?? 0
@@ -194,7 +206,6 @@ export default function GoalsPage() {
           </AccordionTrigger>
           <AccordionContent className="border-t border-border">
             <div className="space-y-5 p-5">
-              {/* Progress section */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">Progress</span>
@@ -211,7 +222,7 @@ export default function GoalsPage() {
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sub‑goals</h4>
                   <div className="space-y-3">
                     {subGoals.map(sub => {
-                      const subLinked = tasks.filter(t => t.goalId === sub.id)
+                      const subLinked = tasks.filter(t => t.goalId === sub.id && t.status !== "DONE")
                       const subDone = subLinked.filter(t => t.status === "DONE").length
                       const subPct = sub.progress ?? 0
                       return (
@@ -226,25 +237,18 @@ export default function GoalsPage() {
                               <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
                                 <div className={cn("h-full rounded-full", bucketAccent[weightBucket(sub.priorityWeight)])} style={{ width: `${subPct}%` }} />
                               </div>
-                              {/* Hover-only actions */}
                               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <span
                                   onClick={(e) => { e.stopPropagation(); startEdit(sub) }}
                                   className="rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground cursor-pointer"
                                   title="Edit"
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); startEdit(sub) } }}
                                 >
                                   <Pencil className="h-3 w-3" />
                                 </span>
                                 <span
-                                  onClick={(e) => { e.stopPropagation(); removeGoal(sub.id) }}
+                                  onClick={(e) => { e.stopPropagation(); confirmDelete(sub, true) }}
                                   className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive cursor-pointer"
                                   title="Delete"
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); removeGoal(sub.id) } }}
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </span>
@@ -252,89 +256,50 @@ export default function GoalsPage() {
                             </div>
                           </AccordionTrigger>
                           <AccordionContent className="border-t border-border px-4 py-3">
-                            {/* Link tasks for this sub-goal */}
                             <div>
                               <div className="mb-2 flex items-center justify-between">
                                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Tasks</span>
-                                {quickTaskGoalId === sub.id ? (
-                                  <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
-                                    <Input
-                                      autoFocus
-                                      placeholder="Task title..."
-                                      value={quickTaskTitle}
-                                      onChange={(e) => setQuickTaskTitle(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") addQuickTask()
-                                        if (e.key === "Escape") resetQuickTask()
-                                      }}
-                                      className="h-8 flex-1 text-xs"
-                                    />
-                                    <Input
-                                      type="date"
-                                      value={quickTaskDueDate}
-                                      onChange={(e) => setQuickTaskDueDate(e.target.value)}
-                                      className="h-8 w-36 text-xs"
-                                    />
-                                    <Select value={String(quickTaskPriority)} onValueChange={(v) => setQuickTaskPriority(Number(v))}>
-                                      <SelectTrigger className="h-8 w-20 text-xs">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="1">P1</SelectItem>
-                                        <SelectItem value="2">P2</SelectItem>
-                                        <SelectItem value="3">P3</SelectItem>
-                                        <SelectItem value="4">P4</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <Button size="sm" className="h-8 text-xs" onClick={addQuickTask}>Add</Button>
-                                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetQuickTask}>
-                                      <X className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                                    onClick={(e) => { e.stopPropagation(); setQuickTaskGoalId(sub.id) }}
-                                  >
-                                    <Plus className="mr-1 h-3 w-3" /> Add task
-                                  </Button>
-                                )}
-                                {linkingGoalId === sub.id ? (
-                                  <div className="flex items-center gap-2">
-                                    <Select onValueChange={(v) => linkTaskToGoal(v, sub.id)}>
-                                      <SelectTrigger className="h-7 w-44 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
-                                      <SelectContent>
-                                        {unlinkedTasks.length === 0 ? (
-                                          <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem>
-                                        ) : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
-                                      </SelectContent>
-                                    </Select>
-                                    <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-                                  </div>
-                                ) : (
-                                  <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(sub.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-                                    <Link2 className="h-3 w-3" />Link task
-                                  </button>
-                                )}
-                              </div>
-
-                              {subLinked.length === 0 ? (
-                                <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-4 text-center">
-                                  <p className="text-[11px] text-muted-foreground">No tasks linked. Link existing tasks above.</p>
+                                <div className="flex items-center gap-1">
+                                  {quickTaskGoalId === sub.id ? (
+                                    <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                                      <Input autoFocus placeholder="Task title..." value={quickTaskTitle} onChange={(e) => setQuickTaskTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addQuickTask(); if (e.key === "Escape") resetQuickTask() }} className="h-8 flex-1 text-xs" />
+                                      <Input type="date" value={quickTaskDueDate} onChange={(e) => setQuickTaskDueDate(e.target.value)} className="h-8 w-36 text-xs" />
+                                      <Select value={String(quickTaskPriority)} onValueChange={(v) => setQuickTaskPriority(Number(v))}>
+                                        <SelectTrigger className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="1">P1</SelectItem><SelectItem value="2">P2</SelectItem><SelectItem value="3">P3</SelectItem><SelectItem value="4">P4</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <Button size="sm" className="h-8 text-xs" onClick={addQuickTask}>Add</Button>
+                                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetQuickTask}><X className="h-3 w-3" /></Button>
+                                    </div>
+                                  ) : (
+                                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); setQuickTaskGoalId(sub.id) }}><Plus className="mr-1 h-3 w-3" />Add task</Button>
+                                  )}
+                                  {linkingGoalId === sub.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <Select onValueChange={(v) => linkTaskToGoal(v, sub.id)}>
+                                        <SelectTrigger className="h-7 w-44 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
+                                        <SelectContent>
+                                          {unlinkedTasks.length === 0 ? <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem> : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                      <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(sub.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Link2 className="h-3 w-3" />Link task</button>
+                                  )}
                                 </div>
+                              </div>
+                              {subLinked.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-4 text-center"><p className="text-[11px] text-muted-foreground">No tasks linked. Link existing tasks above.</p></div>
                               ) : (
                                 <ul className="divide-y divide-border rounded-lg border border-border">
                                   {subLinked.map((t) => (
                                     <li key={t.id} className="group flex items-center gap-3 px-3 py-2">
                                       <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
-                                      <div className="min-w-0 flex-1">
-                                        <span className={cn("text-xs", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
-                                      </div>
-                                      <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task">
-                                        <X className="h-3 w-3" />
-                                      </button>
+                                      <div className="min-w-0 flex-1"><span className={cn("text-xs", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span></div>
+                                      <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task"><X className="h-3 w-3" /></button>
                                     </li>
                                   ))}
                                 </ul>
@@ -351,116 +316,55 @@ export default function GoalsPage() {
               {/* Quick add sub-goal */}
               {subGoalParentId === g.id ? (
                 <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
-                  <Input
-                    autoFocus
-                    placeholder="Sub-goal title..."
-                    value={subGoalTitle}
-                    onChange={(e) => setSubGoalTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") addSubGoal()
-                      if (e.key === "Escape") setSubGoalParentId(null)
-                    }}
-                    className="h-8 text-xs"
-                  />
+                  <Input autoFocus placeholder="Sub-goal title..." value={subGoalTitle} onChange={(e) => setSubGoalTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addSubGoal(); if (e.key === "Escape") setSubGoalParentId(null) }} className="h-8 text-xs" />
                   <Select value={String(subGoalPriorityWeight)} onValueChange={(v) => setSubGoalPriorityWeight(Number(v))}>
-                    <SelectTrigger className="h-8 w-24 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Must-do</SelectItem>
-                      <SelectItem value="3">Should-do</SelectItem>
-                      <SelectItem value="5">Nice-to-do</SelectItem>
-                    </SelectContent>
+                    <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="1">Must-do</SelectItem><SelectItem value="3">Should-do</SelectItem><SelectItem value="5">Nice-to-do</SelectItem></SelectContent>
                   </Select>
                   <Button size="sm" className="h-8 text-xs" onClick={addSubGoal}>Add</Button>
-                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSubGoalParentId(null)}>
-                    <X className="h-3 w-3" />
-                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSubGoalParentId(null)}><X className="h-3 w-3" /></Button>
                 </div>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={(e) => { e.stopPropagation(); setSubGoalParentId(g.id) }}
-                >
-                  <Plus className="mr-1 h-3 w-3" /> Add sub-goal
-                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); setSubGoalParentId(g.id) }}><Plus className="mr-1 h-3 w-3" />Add sub-goal</Button>
               )}
-              
 
               {/* Linked tasks */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tasks</span>
-                  {quickTaskGoalId === g.id ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
-                      <Input
-                        autoFocus
-                        placeholder="Task title..."
-                        value={quickTaskTitle}
-                        onChange={(e) => setQuickTaskTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") addQuickTask()
-                          if (e.key === "Escape") resetQuickTask()
-                        }}
-                        className="h-8 flex-1 text-xs"
-                      />
-                      <Input
-                        type="date"
-                        value={quickTaskDueDate}
-                        onChange={(e) => setQuickTaskDueDate(e.target.value)}
-                        className="h-8 w-36 text-xs"
-                      />
-                      <Select value={String(quickTaskPriority)} onValueChange={(v) => setQuickTaskPriority(Number(v))}>
-                        <SelectTrigger className="h-8 w-20 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">P1</SelectItem>
-                          <SelectItem value="2">P2</SelectItem>
-                          <SelectItem value="3">P3</SelectItem>
-                          <SelectItem value="4">P4</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button size="sm" className="h-8 text-xs" onClick={addQuickTask}>Add</Button>
-                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetQuickTask}>
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={(e) => { e.stopPropagation(); setQuickTaskGoalId(g.id) }}
-                    >
-                      <Plus className="mr-1 h-3 w-3" /> Add task
-                    </Button>
-                  )}
-                  {linkingGoalId === g.id ? (
-                    <div className="flex items-center gap-2">
-                      <Select onValueChange={(v) => linkTaskToGoal(v, g.id)}>
-                        <SelectTrigger className="h-7 w-48 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
-                        <SelectContent>
-                          {unlinkedTasks.length === 0 ? (
-                            <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem>
-                          ) : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
-                    </div>
-                  ) : (
-                    <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(g.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-                      <Link2 className="h-3 w-3" />Link task
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {quickTaskGoalId === g.id ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                        <Input autoFocus placeholder="Task title..." value={quickTaskTitle} onChange={(e) => setQuickTaskTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addQuickTask(); if (e.key === "Escape") resetQuickTask() }} className="h-8 flex-1 text-xs" />
+                        <Input type="date" value={quickTaskDueDate} onChange={(e) => setQuickTaskDueDate(e.target.value)} className="h-8 w-36 text-xs" />
+                        <Select value={String(quickTaskPriority)} onValueChange={(v) => setQuickTaskPriority(Number(v))}>
+                          <SelectTrigger className="h-8 w-20 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="1">P1</SelectItem><SelectItem value="2">P2</SelectItem><SelectItem value="3">P3</SelectItem><SelectItem value="4">P4</SelectItem></SelectContent>
+                        </Select>
+                        <Button size="sm" className="h-8 text-xs" onClick={addQuickTask}>Add</Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetQuickTask}><X className="h-3 w-3" /></Button>
+                      </div>
+                    ) : (
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); setQuickTaskGoalId(g.id) }}><Plus className="mr-1 h-3 w-3" />Add task</Button>
+                    )}
+                    {linkingGoalId === g.id ? (
+                      <div className="flex items-center gap-2">
+                        <Select onValueChange={(v) => linkTaskToGoal(v, g.id)}>
+                          <SelectTrigger className="h-7 w-48 text-xs"><SelectValue placeholder="Select a task…" /></SelectTrigger>
+                          <SelectContent>
+                            {unlinkedTasks.length === 0 ? <SelectItem value="__none__" disabled>No unlinked tasks</SelectItem> : unlinkedTasks.map((t) => <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <button onClick={() => setLinkingGoalId(null)} className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ) : (
+                      <button onClick={(e) => { e.stopPropagation(); setLinkingGoalId(g.id) }} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"><Link2 className="h-3 w-3" />Link task</button>
+                    )}
+                  </div>
                 </div>
 
                 {linked.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center">
-                    <p className="text-xs text-muted-foreground">No tasks linked yet. Add tasks from the Tasks page, or link existing ones above.</p>
-                  </div>
+                  <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center"><p className="text-xs text-muted-foreground">No tasks linked yet. Add tasks from the Tasks page, or link existing ones above.</p></div>
                 ) : (
                   <ul className="divide-y divide-border rounded-lg border border-border">
                     {linked.map((t) => (
@@ -470,9 +374,7 @@ export default function GoalsPage() {
                           <span className={cn("text-sm", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
                           {t.dueDate && <span className="ml-2 text-[10px] text-muted-foreground">{t.dueDate.slice(0, 10)}</span>}
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task"><X className="h-3.5 w-3.5" /></button>
                       </li>
                     ))}
                   </ul>
@@ -483,7 +385,7 @@ export default function GoalsPage() {
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); startEdit(g) }}>
                   <Pencil className="mr-1.5 h-3 w-3" />Edit
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); removeGoal(g.id) }}>
+                <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); confirmDelete(g, false) }}>
                   <Trash2 className="mr-1.5 h-3 w-3" />Delete
                 </Button>
               </div>
@@ -521,14 +423,8 @@ export default function GoalsPage() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>New Goal</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium">Title</label>
-                <Input placeholder="What are you working toward?" value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGoal()} />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium">Description</label>
-                <Textarea placeholder="Why does this matter? (optional)" value={createDescription} onChange={(e) => setCreateDescription(e.target.value)} rows={3} />
-              </div>
+              <div><label className="mb-1.5 block text-xs font-medium">Title</label><Input placeholder="What are you working toward?" value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGoal()} /></div>
+              <div><label className="mb-1.5 block text-xs font-medium">Description</label><Textarea placeholder="Why does this matter? (optional)" value={createDescription} onChange={(e) => setCreateDescription(e.target.value)} rows={3} /></div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium">Priority</label>
                 <Select value={String(createPriorityWeight)} onValueChange={(v) => setCreatePriorityWeight(Number(v))}>
@@ -546,9 +442,7 @@ export default function GoalsPage() {
                   <SelectTrigger><SelectValue placeholder="None (top-level goal)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None (top-level goal)</SelectItem>
-                    {eligibleParents.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
-                    ))}
+                    {eligibleParents.map(p => (<SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
@@ -560,19 +454,13 @@ export default function GoalsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Edit Goal Dialog (unchanged except added parent info display) */}
+        {/* Edit Goal Dialog */}
         <Dialog open={!!editingGoal} onOpenChange={(open) => !open && setEditingGoal(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>Edit Goal</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium">Title</label>
-                <Input placeholder="Goal title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitEdit()} />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium">Description</label>
-                <Textarea placeholder="Why does this matter?" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
-              </div>
+              <div><label className="mb-1.5 block text-xs font-medium">Title</label><Input placeholder="Goal title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submitEdit()} /></div>
+              <div><label className="mb-1.5 block text-xs font-medium">Description</label><Textarea placeholder="Why does this matter?" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} /></div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium">Priority</label>
                 <Select value={String(editPriorityWeight)} onValueChange={(v) => setEditPriorityWeight(Number(v))}>
@@ -585,14 +473,30 @@ export default function GoalsPage() {
                 </Select>
               </div>
               {editingGoal?.parentGoalId && (
-                <p className="text-xs text-muted-foreground">
-                  This is a sub‑goal of another goal. Parent linkage cannot be changed here.
-                </p>
+                <p className="text-xs text-muted-foreground">This is a sub‑goal of another goal. Parent linkage cannot be changed here.</p>
               )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditingGoal(null)}>Cancel</Button>
               <Button onClick={submitEdit} disabled={!editTitle.trim()}>Save changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete confirmation dialog */}
+        <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Delete goal?</DialogTitle>
+              <DialogDescription>
+                This will permanently delete <strong>{deleteConfirmTitle}</strong>.
+                {deleteIsSubGoal ? "" : " Any sub-goals under it will also be deleted."}
+                {" "}Tasks linked to this goal will be unlinked but not deleted.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={executeDelete}>Delete</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useTasks } from "@/lib/store"
 import { presetCategories, type PresetTask } from "@/lib/preset-tasks"
+import { todayISO } from "@/lib/store"
 
 export function PresetTasksDialog({
   open,
@@ -39,6 +40,7 @@ export function PresetTasksDialog({
       description: task.description || undefined,
       priority: task.priority,
       recurrenceRule: task.recurrenceRule || undefined,
+      dueDate: todayISO(), // ← add this
     })
   }
 

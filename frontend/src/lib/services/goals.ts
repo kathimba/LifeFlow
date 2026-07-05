@@ -223,8 +223,8 @@ export async function recalculateGoalProgressRecursive(goalId: string, userId: s
   }
 
   // Update the goal's progress field
-  await prisma.goal.update({
-    where: { id: goalId },
+  await prisma.goal.updateMany({
+    where: { id: goalId, userId },
     data: { progress: combinedProgress },
   });
 
