@@ -10,25 +10,27 @@ export function getNextRecurrenceDate(
   rule: string
 ): Date | null {
   const normalized = rule.trim().toLowerCase();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // If the due date is in the past, start from today instead
+  const base = currentDueDate < today ? today : currentDueDate;
+  const next = new Date(base);
 
   // Simple patterns
   if (normalized === "daily") {
-    const next = new Date(currentDueDate);
     next.setDate(next.getDate() + 1);
     return next;
   }
   if (normalized === "weekly") {
-    const next = new Date(currentDueDate);
     next.setDate(next.getDate() + 7);
     return next;
   }
   if (normalized === "biweekly") {
-    const next = new Date(currentDueDate);
     next.setDate(next.getDate() + 14);
     return next;
   }
   if (normalized === "monthly") {
-    const next = new Date(currentDueDate);
     next.setMonth(next.getMonth() + 1);
     return next;
   }
@@ -40,7 +42,6 @@ export function getNextRecurrenceDate(
   if (freqMatch) {
     const freq = freqMatch[1];
     const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
-    const next = new Date(currentDueDate);
 
     switch (freq) {
       case "daily":

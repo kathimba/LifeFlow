@@ -292,17 +292,49 @@ export default function GoalsPage() {
                                 </div>
                               </div>
                               {subLinked.length === 0 ? (
-                                <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-4 text-center"><p className="text-[11px] text-muted-foreground">No tasks linked. Link existing tasks above.</p></div>
+                                <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center"><p className="text-xs text-muted-foreground">No tasks linked yet.</p></div>
                               ) : (
-                                <ul className="divide-y divide-border rounded-lg border border-border">
-                                  {subLinked.map((t) => (
-                                    <li key={t.id} className="group flex items-center gap-3 px-3 py-2">
-                                      <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
-                                      <div className="min-w-0 flex-1"><span className={cn("text-xs", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span></div>
-                                      <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task"><X className="h-3 w-3" /></button>
-                                    </li>
-                                  ))}
-                                </ul>
+                                (() => {
+                                  const today = new Date().toISOString().slice(0, 10)
+                                  const grouped = new Map<string, typeof subLinked>()
+
+                                  for (const t of subLinked) {
+                                    const key = t.dueDate ? t.dueDate.slice(0, 10) : "No date"
+                                    if (!grouped.has(key)) grouped.set(key, [])
+                                    grouped.get(key)!.push(t)
+                                  }
+
+                                  return Array.from(grouped.entries()).map(([dateKey, items]) => {
+                                    const isToday = dateKey === today
+                                    const isOverdue = dateKey !== "No date" && dateKey < today
+                                    const label = dateKey === "No date"
+                                      ? "No date"
+                                      : isToday
+                                        ? "Today"
+                                        : isOverdue
+                                          ? `Overdue — ${new Date(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}`
+                                          : new Date(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+
+                                    return (
+                                      <div key={dateKey} className="mb-3">
+                                        <div className={cn("text-[10px] font-semibold uppercase tracking-wider mb-1.5 px-1", isOverdue ? "text-destructive" : "text-muted-foreground")}>
+                                          {label}
+                                        </div>
+                                        <ul className="divide-y divide-border rounded-lg border border-border">
+                                          {items.map((t) => (
+                                            <li key={t.id} className="group flex items-center gap-3 px-3 py-2.5">
+                                              <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
+                                              <div className="min-w-0 flex-1">
+                                                <span className={cn("text-sm", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
+                                              </div>
+                                              <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task"><X className="h-3.5 w-3.5" /></button>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )
+                                  })
+                                })()
                               )}
                             </div>
                           </AccordionContent>
@@ -364,20 +396,49 @@ export default function GoalsPage() {
                 </div>
 
                 {linked.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center"><p className="text-xs text-muted-foreground">No tasks linked yet. Add tasks from the Tasks page, or link existing ones above.</p></div>
+                  <div className="rounded-lg border border-dashed border-border bg-secondary/20 py-6 text-center"><p className="text-xs text-muted-foreground">No tasks linked yet.</p></div>
                 ) : (
-                  <ul className="divide-y divide-border rounded-lg border border-border">
-                    {linked.map((t) => (
-                      <li key={t.id} className="group flex items-center gap-3 px-3 py-2.5">
-                        <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <span className={cn("text-sm", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
-                          {t.dueDate && <span className="ml-2 text-[10px] text-muted-foreground">{t.dueDate.slice(0, 10)}</span>}
+                  (() => {
+                    const today = new Date().toISOString().slice(0, 10)
+                    const grouped = new Map<string, typeof linked>()
+
+                    for (const t of linked) {
+                      const key = t.dueDate ? t.dueDate.slice(0, 10) : "No date"
+                      if (!grouped.has(key)) grouped.set(key, [])
+                      grouped.get(key)!.push(t)
+                    }
+
+                    return Array.from(grouped.entries()).map(([dateKey, items]) => {
+                      const isToday = dateKey === today
+                      const isOverdue = dateKey !== "No date" && dateKey < today
+                      const label = dateKey === "No date"
+                        ? "No date"
+                        : isToday
+                          ? "Today"
+                          : isOverdue
+                            ? `Overdue — ${new Date(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}`
+                            : new Date(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+
+                      return (
+                        <div key={dateKey} className="mb-3">
+                          <div className={cn("text-[10px] font-semibold uppercase tracking-wider mb-1.5 px-1", isOverdue ? "text-destructive" : "text-muted-foreground")}>
+                            {label}
+                          </div>
+                          <ul className="divide-y divide-border rounded-lg border border-border">
+                            {items.map((t) => (
+                              <li key={t.id} className="group flex items-center gap-3 px-3 py-2.5">
+                                <Checkbox checked={t.status === "DONE"} onCheckedChange={() => toggleTaskDone(t.id, t.status)} className="shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <span className={cn("text-sm", t.status === "DONE" && "text-muted-foreground line-through")}>{t.title}</span>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task"><X className="h-3.5 w-3.5" /></button>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); unlinkTask(t.id) }} className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100" title="Unlink task"><X className="h-3.5 w-3.5" /></button>
-                      </li>
-                    ))}
-                  </ul>
+                      )
+                    })
+                  })()
                 )}
               </div>
 

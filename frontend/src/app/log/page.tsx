@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useLogs, todayISO, addDays } from "@/lib/store"
 import { SimilarEntries } from "@/components/similar-entries"
+import { JournalGuide } from "@/components/journal-guide"
 
 // Mood — 3 levels 
 const moodMeta: Record<number, { label: string; Icon: typeof Frown }> = {
@@ -214,7 +215,10 @@ const save = useCallback(async () => {
               })}
             </div>
           </div>
+          <JournalGuide />
         </section>
+
+        
 
         <section>
           <div className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
