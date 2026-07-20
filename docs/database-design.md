@@ -1,161 +1,87 @@
-# LifeFlow Database Design
+# Database Design
 
-## Design Principles
+## Principles
 
-1. User owns all data.
-2. Tasks can optionally belong to goals.
-3. Every action is logged.
-4. AI features consume activity history.
+- Every row is owned by a user (`user_id` on all tables).
+- Tasks optionally link to goals.
+- Goals support parent-child hierarchies (max 2 levels).
+- All significant actions are logged for future analytics.
+- Embeddings are stored alongside source data in the same database.
 
----
+## Core Tables
 
-# users
+### users
+- `id` (UUID, PK)
+- `email` (unique)
+- `name`
+- Timestamps
 
-Purpose:
-Store account information.
+### goals
+- `id`, `user_id` (FK)
+- `title`, `description`
+- `priority_weight` (1=highest, 5=lowest)
+- `status` (ACTIVE | PAUSED | COMPLETED)
+- `progress` (0-100, computed by application)
+- `parent_goal_id` (self-referencing FK for sub-goals)
+- `target_date`
+- Timestamps
 
-Fields:
+### tasks
+- `id`, `user_id` (FK), `goal_id` (FK, nullable)
+- `title`, `description`
+- `status` (TODO | IN_PROGRESS | DONE | ARCHIVED)
+- `priority` (1=urgent, 5=low)
+- `due_date`
+- `recurrence_rule` (daily, weekly, biweekly, monthly)
+- `completed_at`
+- Timestamps
 
-- id (UUID, PK)
-- email
-- password_hash
-- full_name
-- created_at
-- updated_at
+### journal_entries
+- `id`, `user_id` (FK)
+- `content`
+- `mood` (1-5)
+- `energy` (1-5)
+- Timestamps
 
----
+### documents
+- `id`, `user_id` (FK), `goal_id` (FK, nullable), `task_id` (FK, nullable)
+- `title`, `description`
+- `file_name`, `file_type`, `file_size`
+- `storage_key` (path in R2 bucket)
+- `extracted_text` (populated from PDF content)
+- Timestamps
 
-# goals
+### activity_logs
+- `id`, `user_id` (FK)
+- `entity_type` (TASK | GOAL | JOURNAL | DOCUMENT)
+- `entity_id`
+- `action` (CREATED | UPDATED | COMPLETED | DELETED)
+- `metadata` (JSON)
+- Timestamps
 
-Purpose:
-Store user goals.
+### reminders
+- `id`, `user_id` (FK), `task_id` (FK)
+- `remind_at`
+- `message`
+- `status` (PENDING | SENT | DISMISSED)
+- Timestamps
 
-Fields:
+### embeddings
+- `id`, `user_id` (FK)
+- `entity_type`, `entity_id`
+- `embedding` (vector(384) — pgvector)
+- Timestamps
 
-- id (UUID, PK)
-- user_id (FK)
-- title
-- description
-- priority_weight
-- status
-- target_date
-- created_at
-- updated_at
+## Entity Relationships
+User ──┬── Goal ──┬── Task
+│ ├── Document
+│ └── Goal (self-reference: sub-goals)
+├── JournalEntry
+├── ActivityLog
+├── Reminder
+└── Embedding
 
-Status:
 
-- ACTIVE
-- COMPLETED
-- ARCHIVED
-
----
-
-# tasks
-
-Purpose:
-Store user tasks.
-
-Fields:
-
-- id (UUID, PK)
-- user_id (FK)
-- goal_id (FK, nullable)
-- title
-- description
-- priority
-- status
-- due_date
-- created_at
-- completed_at
-
-Priority:
-
-- P1
-- P2
-- P3
-- P4
-
-Status:
-
-- TODO
-- IN_PROGRESS
-- DONE
-
----
-
-# activity_logs
-
-Purpose:
-Capture user behaviour.
-
-Fields:
-
-- id (UUID, PK)
-- user_id (FK)
-- action_type
-- entity_type
-- entity_id
-- metadata (JSONB)
-- created_at
-
-Examples:
-
-task_created
-task_completed
-goal_created
-goal_updated
-
----
-
-# Future Tables
-
-## journal_entries
-
-Fields:
-
-- id
-- user_id
-- content
-- mood
-- created_at
-
----
-
-## documents
-
-Fields:
-
-- id
-- user_id
-- file_url
-- title
-- uploaded_at
-
----
-
-## reminders
-
-Fields:
-
-- id
-- user_id
-- task_id
-- trigger_time
-- recurrence_rule
-
----
-
-## embeddings
-
-Purpose:
-AI memory system.
-
-Fields:
-
-- id
-- entity_type
-- entity_id
-- embedding_vector
-
-Technology:
-pgvector
+Tasks and Documents can optionally link to Goals. Deleting a Goal sets its tasks'
+`goal_id` to null (preserves the tasks). Deleting a parent goal promotes its sub-goals
+to top-level.

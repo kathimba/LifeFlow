@@ -2,144 +2,48 @@
 
 ## Overview
 
-LifeFlow is an AI-powered personal productivity platform that combines:
+LifeFlow is a personal productivity platform combining task management, goal tracking,
+daily journaling, document storage, and AI-powered insights — all from a single codebase.
 
-- Task Management
-- Goal Tracking
-- Daily Journaling
-- Document Management
-- AI Recommendations
+## Stack
 
-The system follows a split architecture:
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS, shadcn/ui |
+| Backend | Next.js API Routes (BFF pattern) |
+| Database | PostgreSQL (via Supabase) + pgvector |
+| ORM | Prisma |
+| Auth | Supabase Auth |
+| Storage | Cloudflare R2 |
+| AI Embeddings | Python FastAPI microservice (all-MiniLM-L6-v2) |
 
-Frontend (Next.js)
-        |
-        v
-Backend API (FastAPI)
-        |
-        v
-PostgreSQL Database
-        |
-        v
-AI Services Layer
+## Architecture Pattern
+Browser → Next.js (UI + API Routes) → Prisma → PostgreSQL
+↓ ↓
+Supabase Auth FastAPI (embeddings only)
 
----
+The FastAPI service is a single-purpose embedding worker — it does not write to the database
+or handle any business logic. All CRUD flows through Next.js route handlers → service layer → Prisma.
 
-## Technology Stack
+## Key Design Decisions
 
-### Frontend
+- **No separate backend**: Next.js API routes serve as the backend, keeping the project in one
+  repo and one deployment target.
+- **Service layer**: All business logic lives in `src/lib/services/`. Route handlers are thin
+  wrappers that handle auth, validation, and HTTP responses.
+- **pgvector**: Semantic search runs on the same PostgreSQL instance — no external vector database.
+- **Local embeddings**: The embedding model runs on your machine via FastAPI. No API keys or
+  external costs.
 
-- Next.js (App Router)
-- TypeScript
-- TailwindCSS
-- Zustand
-- React Query
-
-### Backend
-
-- FastAPI
-- SQLAlchemy
-- Alembic
-
-### Database
-
-- PostgreSQL
-- pgvector (future AI memory)
-
-### Authentication
-
-- Supabase Auth
-
-### Storage
-
-- Cloudflare R2
-
-### AI Layer
-
-Phase 1:
-- No AI
-
-Phase 2:
-- Rule-based recommendations
-
-Phase 3:
-- Embeddings
-- Semantic Search
-- Task Recommendations
-
----
-
-## System Modules
-
-### Authentication
-
-Responsibilities:
-- Login
-- Registration
-- Session Management
-
-### Tasks Module
-
-Responsibilities:
-- Create Tasks
-- Edit Tasks
-- Complete Tasks
-- Prioritize Tasks
-
-### Goals Module
-
-Responsibilities:
-- Goal Creation
-- Goal Tracking
-- Goal Progress
-
-### Dashboard Module
-
-Responsibilities:
-- Today View
-- Active Goals
-- Completion Metrics
-
-### Activity Logging
-
-Responsibilities:
-- Record all user actions
-- Feed future AI systems
-
----
-
-## Future Modules
-
-### Journaling
-
-- Daily Logs
-- Reflections
-- Mood Tracking
-
-### Documents
-
-- File Uploads
-- Document Linking
-- Search
-
-### Recommendations
-
-- Suggested Tasks
-- Goal Alignment
-- Weekly Insights
-
----
-
-## Deployment
-
-Frontend:
-- Vercel
-
-Backend:
-- Render / Fly.io
-
-Database:
-- Supabase PostgreSQL
-
-Storage:
-- Cloudflare R2
+## Directory Structure (simplified)
+frontend/
+├── prisma/ # Schema & migrations
+├── src/
+│ ├── app/ # Next.js pages & API routes
+│ ├── components/ # UI components
+│ └── lib/
+│ ├── services/ # Business logic
+│ ├── auth/ # Supabase helpers
+│ └── store.ts # Client-side data hooks
+backend/
+└── embedding_service.py # FastAPI embedding server
