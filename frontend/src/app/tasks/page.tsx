@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react"
 import {
   Plus, Trash2, Calendar as CalendarIcon, Target,
-  CheckCircle2, Circle, Clock, ListFilter, Sparkles
+  CheckCircle2, Circle, Clock, ListFilter, Sparkles, Filter
 } from "lucide-react"
 
 import AppLayout from "@/app/app-layout"
@@ -22,6 +22,7 @@ import { PresetTasksDialog } from "@/components/preset-tasks-dialog"
 
 type FilterTab = "all" | "today" | "upcoming" | "overdue" | "by-goal"
 type GroupBy = "none" | "priority" | "due-date"
+type StatusFilter = "all" | "pending" | "in-progress" | "completed"
 
 const statusLabel: Record<TaskStatus, string> = {
   TODO: "Todo", IN_PROGRESS: "In Progress", DONE: "Done", ARCHIVED: "Archived",
@@ -35,6 +36,7 @@ export default function TasksPage() {
   const { goals } = useGoals()
   const [filter, setFilter] = useState<FilterTab>("today")
   const [groupBy, setGroupBy] = useState<GroupBy>("priority")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("completed")
   const [modalOpen, setModalOpen] = useState(false)
   const [presetOpen, setPresetOpen] = useState(false)
 
@@ -50,14 +52,13 @@ export default function TasksPage() {
     })
   }, [])
 
-  // dueDate from the API includes a full timestamp — normalize to YYYY-MM-DD for comparisons
   const dateOnly = (t: Task) => t.dueDate?.slice(0, 10) ?? null
 
   const filteredTasks = useMemo(() => {
     if (!dateCtx) {
       return filter === "all" ? tasks : tasks.filter((t) => t.status !== "DONE")
     }
-    return tasks.filter((t) => {
+    let result = tasks.filter((t) => {
       const due = dateOnly(t)
       if (filter === "all") return true
       if (filter === "today") return due === dateCtx.today
@@ -66,7 +67,16 @@ export default function TasksPage() {
       if (filter === "by-goal") return true
       return true
     })
-  }, [tasks, filter, dateCtx])
+
+    // Apply status filter when in by-goal mode
+    if (filter === "by-goal" && statusFilter !== "all") {
+      if (statusFilter === "pending") result = result.filter((t) => t.status === "TODO")
+      else if (statusFilter === "in-progress") result = result.filter((t) => t.status === "IN_PROGRESS")
+      else if (statusFilter === "completed") result = result.filter((t) => t.status === "DONE")
+    }
+
+    return result
+  }, [tasks, filter, dateCtx, statusFilter])
 
   const groupedTasks = useMemo(() => {
     if (groupBy === "none") return { "": filteredTasks }
@@ -105,13 +115,44 @@ export default function TasksPage() {
 
   const byGoalGroups = useMemo(() => {
     if (filter !== "by-goal") return null
-    const groups: Record<string, typeof filteredTasks> = {}
-    const noGoal = filteredTasks.filter((t) => !t.goalId)
+
+    const allGoals: { id: string; title: string }[] = []
     for (const g of goals) {
-      const items = filteredTasks.filter((t) => t.goalId === g.id)
-      if (items.length) groups[g.title] = items
+      allGoals.push({ id: g.id, title: g.title })
+      if (g.subGoals) {
+        for (const sub of g.subGoals) {
+          allGoals.push({ id: sub.id, title: `↳ ${sub.title}` })
+        }
+      }
     }
+
+    const sortByDate = (a: Task, b: Task) => {
+      const da = dateOnly(a)
+      const db = dateOnly(b)
+      if (!da && !db) return 0
+      if (!da) return 1
+      if (!db) return -1
+      return db.localeCompare(da) // newest first
+    }
+
+    const groups: Record<string, typeof filteredTasks> = {}
+    const assigned = new Set<string>()
+
+    for (const goal of allGoals) {
+      const items = filteredTasks
+        .filter((t) => t.goalId === goal.id)
+        .sort(sortByDate)
+      if (items.length > 0) {
+        groups[goal.title] = items
+        items.forEach((t) => assigned.add(t.id))
+      }
+    }
+
+    const noGoal = filteredTasks
+      .filter((t) => !t.goalId && !assigned.has(t.id))
+      .sort(sortByDate)
     if (noGoal.length) groups["No Goal"] = noGoal
+
     return groups
   }, [filteredTasks, filter, goals])
 
@@ -144,25 +185,54 @@ export default function TasksPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-1 overflow-x-auto pb-1 text-xs">
             {([
-              {key:"overdue",label:"overdue"},
+              {key:"overdue",label:"Overdue"},
               {key:"today",label:"Today"},
-              {key:"upcoming",label:"upcoming"},
+              {key:"upcoming",label:"Upcoming"},
               {key:"by-goal",label:"By Goal"},
               {key:"all",label:"All"}] as {key:FilterTab;label:string}[]).map((f) => (
               <button key={f.key} onClick={() => setFilter(f.key)} className={cn("rounded-md px-3 py-1.5 whitespace-nowrap capitalize transition-colors", filter === f.key ? "bg-secondary text-foreground font-medium" : "text-muted-foreground hover:text-foreground")}>{f.label}</button>
             ))}
           </div>
-          {filter !== "by-goal" && (
-            <div className="flex items-center gap-2 text-xs">
-              <ListFilter className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Group by</span>
-              <div className="flex rounded-md border border-border overflow-hidden">
-                {([{key:"none",label:"None"},{key:"priority",label:"Priority"},{key:"due-date",label:"Due Date"}] as {key:GroupBy;label:string}[]).map((g) => (
-                  <button key={g.key} onClick={() => setGroupBy(g.key)} className={cn("px-2.5 py-1 transition-colors", groupBy === g.key ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>{g.label}</button>
-                ))}
+          <div className="flex items-center gap-3">
+            {filter === "by-goal" && (
+              <div className="flex items-center gap-2 text-xs">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Status</span>
+                <div className="flex rounded-md border border-border overflow-hidden">
+                  {([
+                    { key: "completed", label: "Completed" },
+                    { key: "pending", label: "Pending" },
+                    { key: "in-progress", label: "In Progress" },
+                    { key: "all", label: "All" },
+                  ] as { key: StatusFilter; label: string }[]).map((s) => (
+                    <button
+                      key={s.key}
+                      onClick={() => setStatusFilter(s.key)}
+                      className={cn(
+                        "px-2.5 py-1 transition-colors",
+                        statusFilter === s.key
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-card text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {filter !== "by-goal" && (
+              <div className="flex items-center gap-2 text-xs">
+                <ListFilter className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Group by</span>
+                <div className="flex rounded-md border border-border overflow-hidden">
+                  {([{key:"none",label:"None"},{key:"priority",label:"Priority"},{key:"due-date",label:"Due Date"}] as {key:GroupBy;label:string}[]).map((g) => (
+                    <button key={g.key} onClick={() => setGroupBy(g.key)} className={cn("px-2.5 py-1 transition-colors", groupBy === g.key ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground")}>{g.label}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-6">

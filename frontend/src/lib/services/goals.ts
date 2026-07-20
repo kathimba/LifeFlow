@@ -180,7 +180,15 @@ export async function deleteGoal(userId: string, goalId: string) {
  * Recursively recalculate progress for a goal based on its tasks AND sub-goals.
  * Then update all ancestors up the tree.
  */
-export async function recalculateGoalProgressRecursive(goalId: string, userId: string) {
+export async function recalculateGoalProgressRecursive(
+  goalId: string, 
+  userId: string,
+  visited: Set<string> = new Set()
+) {
+  // Prevent infinite recursion
+  if (visited.has(goalId)) return;
+  visited.add(goalId);
+
   // Fetch the goal with its tasks and immediate sub-goals
   const goal = await prisma.goal.findFirst({
     where: { id: goalId, userId },
@@ -199,11 +207,9 @@ export async function recalculateGoalProgressRecursive(goalId: string, userId: s
   // ----- sub-goal contribution -----
   let subGoalProgressSum = 0;
   if (goal.subGoals.length > 0) {
-    // First ensure each sub-goal's progress is up‑to‑date (recursive)
     for (const sub of goal.subGoals) {
-      await recalculateGoalProgressRecursive(sub.id, userId);
+      await recalculateGoalProgressRecursive(sub.id, userId, visited);
     }
-    // Re‑fetch sub‑goals to get their updated progress
     const updatedSubs = await prisma.goal.findMany({
       where: { id: { in: goal.subGoals.map(s => s.id) }, userId },
       select: { progress: true },
@@ -211,25 +217,24 @@ export async function recalculateGoalProgressRecursive(goalId: string, userId: s
     subGoalProgressSum = updatedSubs.reduce((sum, s) => sum + s.progress, 0);
   }
 
-  // Combined progress: average of (task progress) and (average sub-goal progress)
-  let combinedProgress = taskProgress; // default if no sub-goals
-  if (goal.subGoals.length > 0) {
+  // Combined progress
+  let combinedProgress: number;
+  if (totalTasks > 0 && goal.subGoals.length > 0) {
     const avgSubGoalProgress = Math.round(subGoalProgressSum / goal.subGoals.length);
-    if (totalTasks > 0) {
-      combinedProgress = Math.round((taskProgress + avgSubGoalProgress) / 2);
-    } else {
-      combinedProgress = avgSubGoalProgress;
-    }
+    combinedProgress = Math.round((taskProgress + avgSubGoalProgress) / 2);
+  } else if (goal.subGoals.length > 0) {
+    combinedProgress = Math.round(subGoalProgressSum / goal.subGoals.length);
+  } else {
+    combinedProgress = taskProgress;
   }
 
-  // Update the goal's progress field
   await prisma.goal.updateMany({
     where: { id: goalId, userId },
     data: { progress: combinedProgress },
   });
 
-  // If this goal has a parent, recalculate it as well (walk up)
-  if (goal.parentGoalId) {
-    await recalculateGoalProgressRecursive(goal.parentGoalId, userId);
+  // Walk up to parent (only if not already visited)
+  if (goal.parentGoalId && !visited.has(goal.parentGoalId)) {
+    await recalculateGoalProgressRecursive(goal.parentGoalId, userId, visited);
   }
 }

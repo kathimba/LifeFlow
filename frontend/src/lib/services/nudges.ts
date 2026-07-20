@@ -34,6 +34,15 @@ export async function getGoalNudges(userId: string): Promise<Nudge[]> {
         where: { userId },
         select: { id: true, status: true, completedAt: true, createdAt: true },
       },
+      subGoals: {
+        where: { userId },
+        include: {
+          tasks: {
+            where: { userId, status: { in: ["TODO", "IN_PROGRESS"] } },
+            select: { id: true, status: true },
+          },
+        },
+      },
     },
   });
 
@@ -92,7 +101,20 @@ export async function getGoalNudges(userId: string): Promise<Nudge[]> {
     const openTasks = goal.tasks.filter(
       (t) => t.status === "TODO" || t.status === "IN_PROGRESS"
     );
-    if (openTasks.length === 0) {
+
+    // Check if sub-goals have open tasks
+    let hasSubGoalActivity = false;
+    if (openTasks.length === 0 && goal.subGoals && goal.subGoals.length > 0) {
+      hasSubGoalActivity = goal.subGoals.some(
+        (sub) =>
+          sub.tasks?.some(
+            (t) => t.status === "TODO" || t.status === "IN_PROGRESS"
+          )
+      );
+    }
+
+    // Only flag if no open tasks AND no sub-goal activity
+    if (openTasks.length === 0 && !hasSubGoalActivity) {
       nudges.push({
         type: "missing_next_action",
         severity: "warning",

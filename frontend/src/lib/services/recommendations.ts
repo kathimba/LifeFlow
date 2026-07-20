@@ -71,10 +71,10 @@ export async function getNextBestTasks(
       const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
       const diffDays = Math.floor((dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (diffDays < 0) dueUrgency = 30; // overdue
-      else if (diffDays === 0) dueUrgency = 28;
-      else if (diffDays === 1) dueUrgency = 20;
-      else if (diffDays <= 7) dueUrgency = 15;
+      if (diffDays < 0) dueUrgency = 35; // overdue
+      else if (diffDays === 0) dueUrgency = 50; // today — always beats future tasks
+      else if (diffDays === 1) dueUrgency = 15; // tomorrow
+      else if (diffDays <= 7) dueUrgency = 10; // this week
       else dueUrgency = 5;
     }
 
