@@ -1,149 +1,184 @@
 # LifeFlow
 
-A personal productivity platform that combines task management, goal tracking, daily journaling, document storage, and AI-powered insights — all from a single codebase.
+**A personal productivity platform that brings tasks, goals, journaling, documents, and AI-powered insights together in one application.**
+
+LifeFlow helps individuals organize their work and personal priorities, understand their productivity patterns, and turn long-term goals into manageable actions.
+
+- **Repository:** https://github.com/kathimba/LifeFlow
+- **Production application:** https://life-flow-beryl.vercel.app/login
 
 ## Features
 
-### Core
-- **Tasks** — Create, prioritize, and track tasks with due dates and recurrence rules
-- **Goals** — Set goals with sub-goals, track progress with automatic roll-up
-- **Journal** — Daily entries with mood and energy tracking, streak counter
-- **Dashboard** — Quick capture, today's focus, and daily recommendations
-- **Documents** — Upload files to Cloudflare R2, link to goals and tasks
+### Core productivity
+- **Tasks:** Create, prioritize, and track tasks with due dates and recurrence.
+- **Goals:** Organize goals and sub-goals, with progress roll-up.
+- **Journal:** Record daily entries, mood, and energy; monitor journaling streaks.
+- **Dashboard:** See today's focus, quick-capture actions, and recommendations.
+- **Documents:** Store files in Cloudflare R2 and associate them with goals and tasks.
 
-### Productivity
-- **Reminders** — Task-linked reminders with bell notifications
-- **Full-text Search** — PostgreSQL-powered search across all entities (Cmd+K)
-- **Preset Tasks** — 10 categories of ready-to-use tasks for inspiration
+### Productivity tools
+- **Reminders:** Task-linked reminders and in-app notifications.
+- **Full-text search:** Search across application data using PostgreSQL full-text search.
+- **Preset tasks:** Ready-to-use task ideas across multiple categories.
+- **Recurring tasks:** Generate the next task instance when a recurring task is completed.
 
-### AI & Insights
-- **Analytics** — Weekly Score, Task Flow, Goal Trends, Peak Productivity Hours
-- **Recommendations** — Daily Focus, Next Best Task, Goal Nudges (5 types)
-- **Semantic Search** — Local embedding model (all-MiniLM-L6-v2) with pgvector
-- **Recurring Engine** — Auto-create next task instance on completion, pattern detection
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui |
-| Backend | Next.js API Routes (BFF pattern) |
-| Database | PostgreSQL + pgvector |
-| ORM | Prisma |
-| Auth | Supabase Auth |
-| Storage | Cloudflare R2 |
-| AI | Python FastAPI + sentence-transformers |
+### AI and insights
+- **Analytics:** Weekly score, task flow, goal trends, and peak productivity hours.
+- **Recommendations:** Daily focus, next-best-task suggestions, and goal nudges.
+- **Semantic search:** Embedding-based search backed by pgvector.
+- **Embeddings:** A separate Python service uses `all-MiniLM-L6-v2` to generate text embeddings.
+- **PDF text extraction:** The embedding service exposes an endpoint for extracting text from PDF files.
 
 ## Architecture
 
-```
-Browser → Next.js (UI + API Routes) → Prisma → PostgreSQL
-              ↓                            ↓
-        Supabase Auth              FastAPI (embeddings)
+```mermaid
+flowchart TD
+    B[Browser] --> N[Next.js application]
+    N --> A[Next.js API routes / BFF]
+    A --> P[Prisma ORM]
+    P --> DB[(Supabase PostgreSQL + pgvector)]
+    N --> S[Supabase Auth]
+    A --> R[Cloudflare R2]
+    A --> F[FastAPI embedding service]
+    F --> M[all-MiniLM-L6-v2]
 ```
 
-## Getting Started
+| Layer | Technology |
+|---|---|
+| Frontend and application API | Next.js 16, React, TypeScript |
+| UI | Tailwind CSS, shadcn/ui, Radix UI |
+| Backend application pattern | Next.js API routes (BFF) |
+| ORM | Prisma 5 |
+| Database | Supabase-hosted PostgreSQL with pgvector |
+| Authentication | Supabase Auth |
+| Object storage | Cloudflare R2 |
+| Embedding service | Python, FastAPI, sentence-transformers |
+| Embedding model | `all-MiniLM-L6-v2` |
+| Frontend hosting | Vercel |
+| Embedding-service hosting | Fly.io |
+
+The main application backend is implemented through Next.js API routes. FastAPI is a separate service used for embedding generation and PDF text extraction; it is not a second general-purpose application API.
+
+## Repository structure
+
+```text
+LifeFlow/
+├── frontend/
+│   ├── prisma/
+│   │   └── schema.prisma
+│   ├── src/
+│   │   ├── app/              # Pages and API routes
+│   │   ├── components/       # Reusable UI components
+│   │   └── lib/              # Services, auth helpers, utilities
+│   ├── package.json
+│   └── .env.local            # Local secrets; do not commit
+│
+├── backend/
+│   ├── embedding_service.py  # FastAPI embedding/PDF service
+│   └── requirements.txt
+│
+├── README.md
+└── DEVELOPMENT.md
+```
+
+## Getting started
+
+For the full setup—including environment variables, database safety, and running both services—see **[DEVELOPMENT.md](./DEVELOPMENT.md)**.
 
 ### Prerequisites
 
-- Node.js 18+
-- PostgreSQL 16+ with pgvector extension
-- Python 3.10+ (for embeddings)
-- Cloudflare R2 account (for document storage)
-- Supabase account (for auth)
+- Node.js 20.9 or newer (Node.js 22 LTS recommended)
+- npm
+- Python 3.10 or newer (Python 3.11 recommended)
+- A Supabase project with the required PostgreSQL schema and pgvector extension
+- A Cloudflare R2 bucket
+- Access to the LifeFlow FastAPI embedding service, or the ability to run it locally
 
-### Setup
+### Quick start
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/lifeflow.git
-cd lifeflow
+git clone https://github.com/kathimba/LifeFlow.git
+cd LifeFlow
 
-# Install frontend dependencies
+# Configure frontend environment variables first.
+cp frontend/.env.example frontend/.env.local
+```
+
+Edit `frontend/.env.local` with your own development credentials, then:
+
+```bash
 cd frontend
 npm install
-
-# Set up environment variables
-cp .env.example .env.local
-# Fill in your Supabase, database, and R2 credentials
-
-# Push the database schema
-npx prisma db push
-
-# Start the embedding service (separate terminal)
-cd ../backend
-pip install -r requirements.txt
-python embedding_service.py &
-
-# Start the development server
-cd ../frontend
+npx prisma generate
 npm run dev
 ```
 
-### Environment Variables
+The frontend is available at http://localhost:3000.
+
+To run the embedding service locally, open another terminal:
 
 ```bash
-# Database
-DATABASE_URL=postgresql://...
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-
-# Cloudflare R2
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_ENDPOINT=https://...
-R2_BUCKET_NAME=...
-
-# Embedding Service
-EMBEDDING_SERVICE_URL=http://localhost:8000
+cd LifeFlow/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install pypdf
+python embedding_service.py
 ```
 
-### Running Tests
+The embedding service listens on http://localhost:8000. The `pypdf` installation is needed by the `/extract-text` endpoint; ensure it is added to the project's dependency file when maintaining the backend.
+
+> **Database safety:** The quick start intentionally does not run `prisma db push`. A fresh clone can connect to the existing Supabase database without changing its schema. Do not run schema-changing commands against production unless you have reviewed the schema change, confirmed the target database, and taken an appropriate backup.
+
+## Environment variables
+
+The frontend reads its environment variables from `frontend/.env.local` during local development. See [`frontend/.env.example`](./frontend/.env.example) for the template.
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string used by Prisma |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public client key |
+| `R2_ACCESS_KEY_ID` | Cloudflare R2 access key |
+| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 secret key |
+| `R2_ENDPOINT` | Cloudflare R2 S3-compatible endpoint |
+| `R2_BUCKET_NAME` | R2 bucket name |
+| `EMBEDDING_SERVICE_URL` | Base URL of the FastAPI embedding service |
+
+`NODE_ENV` is managed by Next.js and normally does not need to be added to `.env.local`.
+
+The current FastAPI service does not read application-specific environment variables. Its model name and listening port are currently defined in `backend/embedding_service.py`.
+
+**Never commit real `.env` files, database passwords, R2 secrets, or other credentials.** Only commit example files containing empty placeholders.
+
+## Testing and quality checks
+
+The frontend dependencies include Vitest and ESLint. From `frontend/`:
 
 ```bash
-cd frontend
-
-# Set up test database
-createdb lifeflow_test
-DATABASE_URL=postgresql://.../lifeflow_test npx prisma db push
-
-# Run tests
 npx vitest run
+npm run lint
+npm run build
 ```
 
-## Project Structure
-
-```
-frontend/
-├── prisma/              # Database schema and migrations
-├── src/
-│   ├── app/             # Next.js pages and API routes
-│   │   ├── api/         # REST endpoints
-│   │   ├── analytics/   # Analytics dashboard
-│   │   ├── documents/   # Document management
-│   │   ├── goals/       # Goals and sub-goals
-│   │   ├── log/         # Daily journal
-│   │   ├── reminders/   # Reminder management
-│   │   └── tasks/       # Task management
-│   ├── components/      # Reusable UI components
-│   └── lib/
-│       ├── services/    # Business logic layer
-│       │   └── __tests__/  # Service tests (68 tests)
-│       ├── auth/        # Authentication helpers
-│       ├── store.ts     # Client-side data hooks
-│       └── preset-tasks.ts  # Preset task library
-backend/
-└── embedding_service.py # FastAPI embedding server
-```
+Run tests only after configuring a safe test database and test environment. Do not point tests or schema setup commands at the production database.
 
 ## Roadmap
 
-- [x] Phase 1 — Core MVP (auth, tasks, goals, dashboard, journal, activity logging)
-- [x] Phase 2 — Productivity layer (documents, reminders, full-text search, journal polish)
-- [x] Phase 3 — AI & insights (analytics, recommendations, semantic search)
-- [x] Phase 4 — Goal hierarchy (sub-goals, progress roll-up)
-- [ ] Phase 5 — Collaboration (multi-user goals, task assignment, comments)
-- [ ] Phase 6 — Mobile & offline (PWA, offline mode, push notifications)
-- [ ] Phase 7 — Polish (OCR, mood/productivity correlation, weekly review email, data export, dark mode)
+The core productivity, AI/insights, and goal-hierarchy capabilities form the current foundation. Future areas for development include:
+
+- **Collaboration:** Shared goals, task assignment, and comments.
+- **Mobile and offline:** Progressive Web App support, offline workflows, and push notifications.
+- **Further polish:** OCR, mood/productivity correlation, weekly review emails, data export, and dark mode.
+
+## Contributing
+
+1. Create a feature branch.
+2. Make focused changes.
+3. Run relevant tests and lint/build checks.
+4. Keep secrets out of commits.
+5. Open a pull request describing the change and how it was tested.
+
+## License
+
+Add the project's chosen license here. Until a license is added to the repository, do not assume that the source code is available for unrestricted reuse.
